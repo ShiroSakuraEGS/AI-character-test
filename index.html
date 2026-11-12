@@ -44,7 +44,7 @@
             position: relative;
         }
 
-        /* ==================== 1. 全螢幕角色背景影片 ==================== */
+        /* ==================== 1. 雙 Video 雙緩衝無縫全螢幕背景 ==================== */
         .bg-video-wrapper {
             position: fixed;
             inset: 0;
@@ -56,13 +56,25 @@
             background: #000;
         }
 
-        #haruVideo {
+        .bg-video {
+            position: absolute;
+            inset: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
             object-position: center 20%;
             display: block;
+            opacity: 0;
+            transition: opacity 0.35s ease-in-out;
+            will-change: opacity;
+            z-index: 1;
             cursor: pointer;
+        }
+
+        /* 正在播放中的視訊層 */
+        .bg-video.active {
+            opacity: 1;
+            z-index: 2;
         }
 
         /* 漸層光罩 */
@@ -70,6 +82,7 @@
             position: absolute;
             inset: 0;
             pointer-events: none;
+            z-index: 3;
             background: linear-gradient(
                 to bottom,
                 rgba(11, 9, 16, 0.45) 0%,
@@ -79,8 +92,7 @@
             );
         }
 
-        /* ==================== 2. 頂部獨立定位按鈕 (保證 100% 點擊成功) ==================== */
-        /* 左上角狀態徽章 */
+        /* ==================== 2. 頂部獨立定位微型按鈕群 ==================== */
         .top-left-status {
             position: fixed;
             top: calc(10px + var(--safe-top));
@@ -119,7 +131,6 @@
             box-shadow: 0 0 8px var(--indicator-tired);
         }
 
-        /* 右上角獨立按鈕群 */
         .top-right-actions {
             position: fixed;
             top: calc(10px + var(--safe-top));
@@ -166,7 +177,6 @@
             fill: currentColor;
         }
 
-        /* 快捷話題橫列 */
         .quick-chips-wrapper {
             position: fixed;
             bottom: calc(24vh + var(--safe-bottom) + 8px);
@@ -445,7 +455,7 @@
             transform: none;
         }
 
-        /* ==================== 4. 側邊毛玻璃抽屜 (z-index: 2000 絕對優先) ==================== */
+        /* ==================== 4. 側邊毛玻璃抽屜 ==================== */
         .drawer-overlay {
             position: fixed;
             inset: 0;
@@ -577,8 +587,7 @@
 
         .history-item {
             padding: 8px 10px;
-            background: rgba(25, 20, 38, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 8px;
             font-size: 0.82rem;
             line-height: 1.45;
@@ -599,7 +608,6 @@
             margin-bottom: 2px;
         }
 
-        /* 大圖燈箱 (z-index: 3000) */
         .lightbox-modal {
             position: fixed;
             inset: 0;
@@ -624,7 +632,6 @@
             object-fit: contain;
         }
 
-        /* 吐司通知 */
         .toast-notification {
             position: fixed;
             top: 55px;
@@ -649,7 +656,6 @@
             transform: translateX(-50%) translateY(0);
         }
 
-        /* 手機端微型化適配 (< 600px) */
         @media (max-width: 600px) {
             .btn-float-icon span.text-label {
                 display: none;
@@ -693,14 +699,15 @@
 </head>
 <body>
 
-    <!-- ==================== 1. 全螢幕背景影片 ==================== -->
+    <!-- ==================== 1. 雙 Video 雙緩衝無縫全螢幕背景 ==================== -->
     <div class="bg-video-wrapper">
-        <video id="haruVideo" autoplay muted playsinline></video>
+        <!-- 兩座 Video 交叉淡入淡出，消除切換時的黑屏與停頓 -->
+        <video id="videoA" class="bg-video active" autoplay muted playsinline webkit-playsinline preload="auto"></video>
+        <video id="videoB" class="bg-video" muted playsinline webkit-playsinline preload="auto"></video>
         <div class="bg-overlay-gradient"></div>
     </div>
 
-    <!-- ==================== 2. 頂部獨立定位按鈕 (保證 100% 點擊成功) ==================== -->
-    <!-- 左上角狀態徽章 -->
+    <!-- ==================== 2. 頂部獨立定位按鈕 ==================== -->
     <div class="top-left-status">
         <div class="brand-badge" id="btnStatusInfo">
             <div class="status-dot" id="statusDot"></div>
@@ -708,7 +715,6 @@
         </div>
     </div>
 
-    <!-- 右上角獨立按鈕群 (直接掛在 body 上，無任何 pointer-events 阻礙) -->
     <div class="top-right-actions">
         <button class="btn-float-icon" id="btnToggleChips" onclick="window.haruApp?.toggleChips()" title="快捷提問話題">🌸<span class="text-label"> 話題</span></button>
         <button class="btn-float-icon" id="btnOpenHistory" onclick="window.haruApp?.openHistoryDrawer()" title="查看歷史對話紀錄">📜<span class="text-label"> 歷史</span></button>
@@ -718,7 +724,6 @@
         </a>
     </div>
 
-    <!-- 快捷話題膠囊橫列 -->
     <div class="quick-chips-wrapper" id="quickChipsWrapper">
         <div class="quick-chips-scroll">
             <button class="chip-pill" data-prompt="晴琉，早安！今天有乖乖看家嗎？(摸摸頭)">🎀 打個招呼！</button>
@@ -732,7 +737,6 @@
     <!-- ==================== 3. 下 1/3 超緊湊半透明對話框 ==================== -->
     <div class="bottom-dialogue-container">
         <div class="dialogue-card" id="dialogueCard">
-            <!-- 對話框標頭 -->
             <div class="dialogue-header">
                 <div class="speaker-name">
                     <span>🎀 晴琉</span>
@@ -740,23 +744,19 @@
                 </div>
                 <div class="header-actions-right">
                     <div class="user-last-speech" id="userLastSpeech">主人：點擊下方即可對話 🐾</div>
-                    <!-- 一鍵收合/展開按鈕 -->
                     <button class="btn-toggle-minimize" id="btnToggleMinimize" onclick="window.haruApp?.toggleMinimizeDialogue()" title="收合/展開對話框">▼</button>
                 </div>
             </div>
 
-            <!-- 對話內容區：只展示最新一則對白與圖片 -->
             <div class="dialogue-body" id="dialogueBody">
                 <div class="dialogue-text" id="latestBotReply">
                     ……主人？主人終於來看晴琉了……！🥺🖤<br>
                     <span class="action-quote">（歪了歪頭，寬大的黑色長袖子輕輕晃了晃）</span><br>
                     晴琉今天也有乖乖看家喔……主人今天想要和晴琉聊天，還是想看晴琉畫圖呢？(⸝⸝•‧̫•⸝⸝)🐾💭
                 </div>
-                <!-- 圖片預覽容器 -->
                 <div id="imageCardSlot" style="display: none;"></div>
             </div>
 
-            <!-- 底部極簡輸入列 -->
             <div class="input-bar">
                 <input type="text" id="userInput" placeholder="對晴琉說點什麼吧……？（例：畫一張黑粉洋裝）" autocomplete="off" />
                 <button class="btn-send" id="btnSend" onclick="window.haruApp?.handleSend()">
@@ -788,8 +788,8 @@
         <div class="form-group">
             <label for="providerSelect">⚡ AI 推理服務商：</label>
             <select id="providerSelect">
-                <option value="google" selected>Google AI Studio (Gemini)</option>
-                <option value="groq">Groq API (極速 Llama)</option>
+                <option value="google" selected>Google AI Studio (Gemini / Gemma)</option>
+                <option value="groq">Groq API (極速 Llama / Gemma)</option>
             </select>
         </div>
 
@@ -814,10 +814,9 @@
         </div>
 
         <div style="background:rgba(12,9,18,0.7); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; font-size:0.75rem; line-height:1.6; color:var(--text-dim); margin-top:auto;">
-            <b style="color:var(--accent-pink);">📱 手機極簡模式小貼士：</b><br>
-            • 點擊對話框右上角「▼」可一鍵折疊對話，以 95% 全螢幕視野盡情欣賞晴琉！<br>
-            • 再次點擊「▲」或輸入訊息即可快速展開。<br>
-            • 頂部按鈕皆已針對手機微型化，點擊不佔手。
+            <b style="color:var(--accent-pink);">🎬 無縫影片播放升級：</b><br>
+            • 採用遊戲級「雙 Video 緩衝交叉淡入淡出」技術，徹底根除影片更換時的黑屏與卡頓！<br>
+            • 支援免 Key 模式：即使沒貼 Key 也能直接聊天與動漫出圖！
         </div>
     </div>
 
@@ -846,7 +845,7 @@
         <img class="lightbox-img" id="lightboxImg" src="" alt="放大預覽" />
     </div>
 
-    <!-- 純前端雙模驅動引擎 (v2.4 防快取與模型防404升級) -->
-    <script src="./app.js?v=2.4"></script>
+    <!-- 純前端雙模驅動引擎 (v2.5 無縫雙緩衝視訊升級) -->
+    <script src="./app.js?v=2.5"></script>
 </body>
 </html>

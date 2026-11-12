@@ -1,12 +1,10 @@
 /**
- * 🎀 晴琉 (Haru) - 沉浸式可愛小男生 AI Agent 雙模核心引擎 (app.js) - v2.4 終極抗 404 與 Gemma 4 相容版
- * 針對使用者要求：
- * 1. 支援精確模型：
- *    - Gemini 3.8 Flash (gemini-3.8-flash)
- *    - Gemini 2.5 Flash (gemini-2.5-flash)
- *    - Gemma 4 31B (gemma-4-31b-it) - 全面避免強制 JSON 輸出，採用 Prose to JSON 散文解構
- * 2. 徹底消除 API 404：實作標準 SOP 多模型自動備援鏈 (Fallback Chain)
- * 3. 意圖判定全面去除 responseMimeType: "application/json" 強制約束，全模型 100% 相容
+ * 🎀 晴琉 (Haru) - 沉浸式可愛小男生 AI Agent 雙模核心引擎 (app.js) - v2.5 雙Video無縫極致流暢版
+ * 重大突破：
+ * 1. 雙 Video 雙緩衝無縫交叉切換 (Double-Buffering & Crossfade)：
+ *    徹底消除單一 video 更換 src 時的「黑屏閃爍」與「加載緩衝卡頓」，連貫度如原生動畫！
+ * 2. 精確模型端點：Gemini 3.8 Flash / Gemini 2.5 Flash / Gemma 4 31B (散文解構免JSON)
+ * 3. 零金鑰免 Key 陪伴與動漫出圖即開即玩
  */
 
 // ============================================================
@@ -64,40 +62,29 @@ function generateOfflineHaruReply(text, isDrawing = false) {
 }
 
 // ============================================================
-// 🛡️ 2. 防彈級 Reasoning Shield 與 Gemma 4 散文解構 (Prose to JSON)
+// 🛡️ 2. 防彈級 Reasoning Shield 與 Gemma 4 散文解構
 // ============================================================
 
 function cleanReasoningShield(text) {
     if (!text) return "";
     let cleaned = text.replace(/<(think|thought|reasoning)>[\s\S]*?<\/\1>/gi, "");
     cleaned = cleaned.replace(/^(Thinking Process|Reasoning):[\s\S]*?\n\n/gi, "");
-    // 清除 Gemma 4 可能複唱的提示詞結構
     cleaned = cleaned.replace(/^(\* )?(01-|Schema Key|Prompt:).*?\n/gmi, "");
     return cleaned.trim();
 }
 
-/**
- * 散文降級解構器 (Prose to Intent):
- * 避免 Gemma 4 或 Gemini 強制輸出 JSON 造成崩潰，從自然散文中精確解構意圖
- */
 function convertProseToIntent(rawText, userText) {
     const text = cleanReasoningShield(rawText).toLowerCase();
-    
-    // 檢測模型散文中是否含有肯定意圖
     let needImage = false;
     if (text.includes("【是】") || text.includes("是") || text.includes("yes") || text.includes("true") || text.includes("繪製") || text.includes("畫圖")) {
-        // 排除否定的干擾 (如「不是」)
         if (!text.includes("【否】") && !text.includes("不是") && !text.includes("no") && !text.includes("不需要")) {
             needImage = true;
         }
     }
-
-    // 關鍵字雙重兜底保險
     const kws = ["畫", "圖", "照片", "造型", "外表", "長相", "樣貌", "洋裝", "衣服", "穿著", "draw", "image", "pic", "look"];
     if (kws.some(k => userText.toLowerCase().includes(k))) {
         needImage = true;
     }
-
     return needImage;
 }
 
@@ -114,10 +101,9 @@ function extractImagePrompt(reply) {
 }
 
 // ============================================================
-// 🔄 3. 解決 404：精確模型名單與標準 Fallback Chain
+// 🔄 3. Google Gemini 多模型自動備援鏈 (Fallback Chain)
 // ============================================================
 
-// 依照使用者指示與標準 SOP 配置的呼叫鏈
 const STANDARD_FALLBACK_MODELS = [
     "gemini-3.8-flash",
     "gemini-2.5-flash",
@@ -130,22 +116,12 @@ async function callSingleGoogleModel(prompt, systemInstruction, apiKey, modelNam
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
     
     const bodyPayload = {
-        contents: [
-            {
-                role: "user",
-                parts: [{ text: prompt }]
-            }
-        ],
-        generationConfig: {
-            temperature: 0.7
-            // ⚠️ 嚴格避免設定 responseMimeType: "application/json"，防止 Gemma 4 31B 報錯與 404
-        }
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7 }
     };
 
     if (systemInstruction) {
-        bodyPayload.systemInstruction = {
-            parts: [{ text: systemInstruction }]
-        };
+        bodyPayload.systemInstruction = { parts: [{ text: systemInstruction }] };
     }
 
     const response = await fetch(endpoint, {
@@ -162,33 +138,27 @@ async function callSingleGoogleModel(prompt, systemInstruction, apiKey, modelNam
 
     const data = await response.json();
     const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!candidateText) {
-        throw new Error(`[${modelName}] 回傳內容為空`);
-    }
+    if (!candidateText) throw new Error(`[${modelName}] 回傳內容為空`);
     return cleanReasoningShield(candidateText);
 }
 
-/**
- * 具有自動輪替備援機制的 Google 調用器 (自動擊退 404)
- */
 async function callGoogleWithFallback(prompt, systemInstruction, apiKey, preferredModel = "gemini-3.8-flash") {
-    // 使用者選擇的模型優先，後面串接備援鏈
     const modelsToTry = [preferredModel, ...STANDARD_FALLBACK_MODELS.filter(m => m !== preferredModel)];
     let lastError = null;
 
     for (const model of modelsToTry) {
         try {
-            console.log(`[AI Model] 正在連線嘗試: ${model}...`);
+            console.log(`[AI Model] 連線嘗試: ${model}...`);
             const result = await callSingleGoogleModel(prompt, systemInstruction, apiKey, model);
-            console.log(`[AI Model] 模型 ${model} 呼叫成功！🎉`);
+            console.log(`[AI Model] 模型 ${model} 成功回傳！`);
             return { result, usedModel: model };
         } catch (err) {
-            console.warn(`[AI Model 404/Error] 模型 ${model} 無法連線 (${err.message})，自動輪替下一個備援模型...`);
+            console.warn(`[AI Model Fallback] 模型 ${model} 嘗試下一個:`, err.message);
             lastError = err;
         }
     }
 
-    throw lastError || new Error("所有候選模型皆無法連線，請檢查 API Key 是否正確！");
+    throw lastError || new Error("所有候選模型皆無法連線，請檢查 API Key！");
 }
 
 async function callGroqRestApi(prompt, systemInstruction, apiKey, modelName = "llama-3.1-8b-instant") {
@@ -197,25 +167,18 @@ async function callGroqRestApi(prompt, systemInstruction, apiKey, modelName = "l
     if (systemInstruction) messages.push({ role: "system", content: systemInstruction });
     messages.push({ role: "user", content: prompt });
 
-    const payload = {
-        model: modelName,
-        messages,
-        temperature: 0.7
-    };
-
     const response = await fetch(endpoint, {
         method: "POST",
         headers: {
             "Authorization": `Bearer ${apiKey}`,
             "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ model: modelName, messages, temperature: 0.7 })
     });
 
     if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
-        const errMsg = errJson.error?.message || `HTTP ${response.status}`;
-        throw new Error(`[Groq] ${errMsg}`);
+        throw new Error(`[Groq] ${errJson.error?.message || response.statusText}`);
     }
 
     const data = await response.json();
@@ -232,7 +195,85 @@ async function generateImageClientSide(prompt) {
 }
 
 // ============================================================
-// 📱 4. 超緊湊應用控制器 (HaruCompactApp)
+// 🎬 4. 雙 Video 雙緩衝無縫視訊管理器 (Seamless Video Engine)
+// ============================================================
+
+class SeamlessVideoManager {
+    constructor({ videoA, videoB, onEnded }) {
+        this.videoA = videoA;
+        this.videoB = videoB;
+        this.onEnded = onEnded;
+
+        this.currentVideo = this.videoA;
+        this.nextVideo = this.videoB;
+
+        this.initEvents();
+    }
+
+    initEvents() {
+        const handleEnd = (vid) => {
+            if (vid === this.currentVideo && typeof this.onEnded === 'function') {
+                this.onEnded();
+            }
+        };
+
+        this.videoA.addEventListener('ended', () => handleEnd(this.videoA));
+        this.videoB.addEventListener('ended', () => handleEnd(this.videoB));
+
+        // 點擊喚醒
+        const handleWake = () => {
+            if (this.currentVideo.paused) this.currentVideo.play().catch(() => {});
+        };
+        this.videoA.addEventListener('click', handleWake);
+        this.videoB.addEventListener('click', handleWake);
+    }
+
+    /**
+     * 無縫交叉切換至新視訊 (Zero Black Flash)
+     */
+    playSeamless(targetSrc) {
+        // 如果當前已經是同一支且正在播放，不重複加載
+        const decodedTarget = decodeURI(targetSrc);
+        const currentSrc = decodeURI(this.currentVideo.src);
+
+        if (currentSrc.includes(decodedTarget) && !this.currentVideo.paused) {
+            return;
+        }
+
+        // 將下一個影片載入至後台 Video
+        this.nextVideo.src = targetSrc;
+        this.nextVideo.currentTime = 0;
+        this.nextVideo.load();
+
+        const doTransition = () => {
+            this.nextVideo.play().then(() => {
+                // 平滑交叉淡入淡出
+                this.nextVideo.classList.add('active');
+                this.currentVideo.classList.remove('active');
+
+                // 互換指針 (Ping-Pong Buffer)
+                const temp = this.currentVideo;
+                this.currentVideo = this.nextVideo;
+                this.nextVideo = temp;
+            }).catch(e => {
+                console.warn("視訊自動播放受阻，等待使用者點擊:", e);
+            });
+        };
+
+        // 若後台視頻已準備好直接切換，否則等待 canplay
+        if (this.nextVideo.readyState >= 2) {
+            doTransition();
+        } else {
+            this.nextVideo.oncanplay = () => {
+                this.nextVideo.oncanplay = null;
+                doTransition();
+            };
+        }
+    }
+}
+
+// ============================================================
+// 📱 5. 超緊湊應用控制器 (HaruCompactApp)
 // ============================================================
 
 class HaruCompactApp {
@@ -240,6 +281,7 @@ class HaruCompactApp {
         this.history = [];
         this.isGenerating = false;
 
+        // 視訊檔案庫 (使用 encodeURI 確保跨平台相容)
         this.IDLE_VIDEOS = [encodeURI('./assets/待機.mp4'), encodeURI('./assets/待機2.mp4')];
         this.TIRED_VIDEO = encodeURI('./assets/有點累.mp4');
         this.idleIndex = 0;
@@ -250,12 +292,13 @@ class HaruCompactApp {
         this.initDomElements();
         this.loadSettings();
         this.bindEvents();
-        this.initVideoStateMachine();
+        this.initSeamlessVideo();
         this.detectEnvironment();
     }
 
     initDomElements() {
-        this.videoEl = document.getElementById('haruVideo');
+        this.videoA = document.getElementById('videoA');
+        this.videoB = document.getElementById('videoB');
         this.statusDot = document.getElementById('statusDot');
         this.agentStatusText = document.getElementById('agentStatusText');
         this.videoStatusTag = document.getElementById('videoStatusTag');
@@ -335,9 +378,6 @@ class HaruCompactApp {
         }
     }
 
-    /**
-     * 更新模型選單：精準提供 Gemini 3.8 Flash、Gemini 2.5 Flash、Gemma 4 31B
-     */
     updateModelOptions() {
         const provider = this.providerSelect.value;
         const currentModel = this.modelSelect.value;
@@ -347,7 +387,7 @@ class HaruCompactApp {
             const models = [
                 { id: 'gemini-3.8-flash', name: 'Google: Gemini 3.8 Flash (最新極速旗艦)' },
                 { id: 'gemini-2.5-flash', name: 'Google: Gemini 2.5 Flash (經典穩定敏捷)' },
-                { id: 'gemma-4-31b-it', name: 'Google: Gemma 4 31B (開源最強·散文解構)' },
+                { id: 'gemma-4-31b-it', name: 'Google: Gemma 4 31B (開源最強·免JSON)' },
                 { id: 'gemini-1.5-flash', name: 'Google: Gemini 1.5 Flash (輕量備援)' }
             ];
             models.forEach(m => {
@@ -399,43 +439,51 @@ class HaruCompactApp {
         this.quickChipsWrapper.style.display = (currentDisplay === 'none') ? 'flex' : 'none';
     }
 
-    initVideoStateMachine() {
-        if (!this.videoEl) return;
+    // ============================================================
+    // 🎬 無縫視訊狀態機邏輯 (Seamless Video State Machine)
+    // ============================================================
 
-        this.videoEl.addEventListener('ended', () => {
-            if (this.isTiredMode) {
-                this.tiredPlayCount++;
-                if (this.tiredPlayCount < this.TIRED_MAX_REPEATS) {
-                    this.videoStatusTag.textContent = `[累累 ${this.tiredPlayCount + 1}/${this.TIRED_MAX_REPEATS} 💤]`;
-                    this.videoEl.currentTime = 0;
-                    this.videoEl.play().catch(e => console.log(e));
-                } else {
-                    this.isTiredMode = false;
-                    this.tiredPlayCount = 0;
-                    this.idleIndex = 0;
-                    this.agentStatusText.textContent = '晴琉休息完畢 💖';
-                    this.playIdleVideo();
-                }
+    initSeamlessVideo() {
+        if (!this.videoA || !this.videoB) return;
+
+        this.videoManager = new SeamlessVideoManager({
+            videoA: this.videoA,
+            videoB: this.videoB,
+            onEnded: () => this.handleVideoEnded()
+        });
+
+        // 啟動首個待機視訊
+        this.playIdleVideo();
+    }
+
+    handleVideoEnded() {
+        if (this.isTiredMode) {
+            this.tiredPlayCount++;
+            if (this.tiredPlayCount < this.TIRED_MAX_REPEATS) {
+                this.videoStatusTag.textContent = `[累累 ${this.tiredPlayCount + 1}/${this.TIRED_MAX_REPEATS} 💤]`;
+                // 雙 Video 無縫重複播放同一支影片，完全不卡頓
+                this.videoManager.playSeamless(this.TIRED_VIDEO);
             } else {
-                this.idleIndex = (this.idleIndex + 1) % this.IDLE_VIDEOS.length;
+                // 已連續播放 3 次，切換回待機循環
+                this.isTiredMode = false;
+                this.tiredPlayCount = 0;
+                this.idleIndex = 0;
+                this.agentStatusText.textContent = '晴琉休息完畢 💖';
                 this.playIdleVideo();
             }
-        });
-
-        this.videoEl.addEventListener('click', () => {
-            if (this.videoEl.paused) this.videoEl.play();
-        });
-
-        this.playIdleVideo();
+        } else {
+            // 待機 1 ⇄ 待機 2 平滑無縫輪播
+            this.idleIndex = (this.idleIndex + 1) % this.IDLE_VIDEOS.length;
+            this.playIdleVideo();
+        }
     }
 
     playIdleVideo() {
         this.isTiredMode = false;
         this.tiredPlayCount = 0;
-        this.videoEl.src = this.IDLE_VIDEOS[this.idleIndex];
-        this.videoEl.load();
-        this.videoEl.play().catch(() => console.log('等待使用者互動後播放視訊'));
+        const targetSrc = this.IDLE_VIDEOS[this.idleIndex];
 
+        this.videoManager.playSeamless(targetSrc);
         this.videoStatusTag.textContent = `[待機 ${this.idleIndex === 0 ? '1' : '2'}]`;
         this.statusDot.className = 'status-dot';
         this.agentStatusText.textContent = `晴琉在線中 🐾`;
@@ -444,10 +492,8 @@ class HaruCompactApp {
     triggerTiredVideo() {
         this.isTiredMode = true;
         this.tiredPlayCount = 0;
-        this.videoEl.src = this.TIRED_VIDEO;
-        this.videoEl.load();
-        this.videoEl.play().catch(e => console.log(e));
 
+        this.videoManager.playSeamless(this.TIRED_VIDEO);
         this.videoStatusTag.textContent = `[累累 1/3 💤]`;
         this.statusDot.className = 'status-dot tired';
         this.agentStatusText.textContent = `晴琉充電中 💤`;
@@ -564,13 +610,11 @@ class HaruCompactApp {
         const provider = this.providerSelect.value;
         const chosenModel = this.modelSelect.value || "gemini-3.8-flash";
 
-        // 判斷是否為生圖請求 (關鍵字初步預判)
         const kws = ["畫", "圖", "照片", "造型", "外表", "長相", "樣貌", "洋裝", "衣服", "穿著", "draw", "image", "pic", "look"];
         let needImage = kws.some(k => text.toLowerCase().includes(k));
 
-        // ✨ 免 Key 模式支援
         if (!apiKey) {
-            console.log("未檢測到 API Key，自動開啟免金鑰智能互動與生圖模式！");
+            console.log("未填寫 API Key，使用免金鑰智能對話與生圖模式！");
             await new Promise(r => setTimeout(r, 600));
 
             let offlineReply = generateOfflineHaruReply(text, needImage);
@@ -597,7 +641,6 @@ class HaruCompactApp {
             return;
         }
 
-        // ==================== 已有 API Key：防彈推理 (無 JSON 限制，徹底擊退 404) ====================
         try {
             let intentRaw = "";
             if (provider === "google") {
