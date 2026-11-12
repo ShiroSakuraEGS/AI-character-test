@@ -99,3 +99,4 @@ pip install -r requirements.txt
 
 - 專案倉庫：[ShiroSakuraEGS/AI-character-test](https://github.com/ShiroSakuraEGS/AI-character-test)
 - 歡迎提交 Issue 與 Pull Request 一起讓晴琉變得更可愛！🖤🎀
+

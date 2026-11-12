@@ -806,3 +806,4 @@ class HaruChatApp {
 document.addEventListener('DOMContentLoaded', () => {
     window.haruApp = new HaruChatApp();
 });
+
