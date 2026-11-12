@@ -320,50 +320,17 @@ async function callGroqRestApiWithTimeout(prompt, systemInstruction, apiKey, mod
 }
 
 /**
- * 🍌 Nano Banana (Google AI Studio 最簡生圖模型) 客戶端生成引擎
+ * 🎨 Pollinations.AI 客戶端極致動漫生圖引擎
+ * 全面改用 Pollinations.AI：完全免密鑰、零額度限制、即時出圖！
  */
-async function generateImageNanoBanana(prompt, apiKey = null) {
-    // 1. 若有 Google AI Studio API Key，優先調用官方 Imagen 3 / Nano Banana API
-    if (apiKey) {
-        try {
-            console.log("[Nano Banana] 嘗試調用 Google AI Studio 原生生圖端點...");
-            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 8500);
-
-            const res = await fetch(endpoint, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    instances: [{ prompt: prompt }],
-                    parameters: { sampleCount: 1, aspectRatio: "1:1" }
-                }),
-                signal: controller.signal
-            });
-            clearTimeout(timer);
-
-            if (res.ok) {
-                const data = await res.json();
-                const base64Img = data.predictions?.[0]?.bytesBase64Encoded;
-                if (base64Img) {
-                    console.log("[Nano Banana] Google AI Studio 原生出圖成功！✨");
-                    return {
-                        imageUrl: `data:image/jpeg;base64,${base64Img}`,
-                        toolName: "🍌 Nano Banana (Google AI Studio 最簡模型)"
-                    };
-                }
-            }
-        } catch (e) {
-            console.warn("[Nano Banana] 原生端點超時或受限，切換 Nano Banana 高速動漫通道:", e.message);
-        }
-    }
-
-    // 2. Nano Banana 快速動漫生圖通道 (免 Key / 跨域相容)
-    const encoded = encodeURIComponent(prompt);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=512&height=512&nologo=true&model=flux`;
+async function generateImagePollinations(prompt) {
+    console.log("[Pollinations.AI] 啟動極致動漫出圖:", prompt);
+    const cleanPrompt = encodeURIComponent(prompt);
+    const seed = Math.floor(Math.random() * 1000000);
+    const imageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=512&height=512&nologo=true&model=flux&seed=${seed}`;
     return {
         imageUrl: imageUrl,
-        toolName: "🍌 Nano Banana (Google AI Studio 最簡模型)"
+        toolName: "🎨 Pollinations.AI (FLUX 動漫引擎)"
     };
 }
 
@@ -840,9 +807,9 @@ class HaruCompactApp {
             let generatedImg = null;
 
             if (hasDrawKw) {
-                this.agentStatusText.textContent = '🍌 Nano Banana 出圖中！';
+                this.agentStatusText.textContent = '🎨 Pollinations 出圖中！';
                 const defaultPrompt = "1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, oversized black hoodie with cat ears, gothic punk aesthetic, masterpiece, best quality";
-                generatedImg = await generateImageNanoBanana(defaultPrompt, null);
+                generatedImg = await generateImagePollinations(defaultPrompt);
             }
 
             this.history.push({ role: 'assistant', content: offlineReply });
@@ -893,9 +860,9 @@ class HaruCompactApp {
         let generatedImg = null;
 
         if (needImage) {
-            this.agentStatusText.textContent = '🍌 Nano Banana 出圖中！';
+            this.agentStatusText.textContent = '🎨 Pollinations 出圖中！';
             const promptToDraw = imagePrompt || "1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, oversized black hoodie with cat ears, gothic punk aesthetic, masterpiece, best quality";
-            generatedImg = await generateImageNanoBanana(promptToDraw, apiKey);
+            generatedImg = await generateImagePollinations(promptToDraw);
         }
 
         this.updateLatestDialogue({

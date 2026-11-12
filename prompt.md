@@ -53,11 +53,11 @@ flowchart TD
   - 主提示詞規範晴琉在主人要求看畫面時，回覆結尾自動附帶 `<image_prompt>英文生圖提示詞</image_prompt>`。
   - 一次 LLM 請求同時取得對白與提示詞，反應時間壓縮至 1~2 秒！
 
-### 2. 生圖工具調用 (Nano Banana 整合)
+### 2. 生圖工具調用 (Pollinations.AI 整合)
 - **觸發條件**：回覆中含有 `<image_prompt>` 或前端命中生圖意圖。
 - **生圖引擎**：
-  - **Google AI Studio 原生模式**：有 Key 時優先調用 Nano Banana / Imagen 3 最簡 API (`imagen-3.0-generate-002:predict`)。
-  - **免 Key / 跨域備援模式**：調用 Nano Banana 動漫極致出圖通道，保證 100% 穩定出圖、不報錯。
+  - **全面採用 Pollinations.AI (FLUX 動漫極致引擎)**：
+  - 免 API Key、免綁卡、零額度限制、無 CORS 阻礙，即時高速出圖，畫質細膩穩定。
 - **渲染與燈箱**：出圖後於對話框上方以 38px 微型縮圖呈現，點擊可開啟全螢幕大圖燈箱（Lightbox）。
 
 ### 3. 角色視訊狀態機 (Video FSM)
@@ -138,12 +138,12 @@ flowchart TD
 
 ## 🛡️ 四、 API 串接與防 404 自癒備援鏈 (Anti-404 Fallback & Auto-Healing)
 
-### 1. 對話模型精簡規範
+### 1. 對話模型精簡與生圖引擎規範
 - **對話模型嚴格僅保留兩款**：
   1. `gemini-3.8-flash`（Gemini 3.8 Flash 最新極速旗艦）
   2. `gemma-4-31b-it`（Gemma 4 31B 開源最強推理，嚴格避免 JSON 產出）
 - **生圖模型指定**：
-  - **Nano Banana**（Google AI Studio 最簡生圖模型，底層以 Imagen 3 為核心，支援免 Key 動漫生成備援通道）。
+  - **Pollinations.AI (FLUX 動漫極致引擎)**：完全不依賴 Google AI Studio 生圖權限，免 API Key、零延遲、保證 100% 穩定出圖。
 
 ### 2. 徹底根治「models/... is not found for API version v1beta」404 報錯
 1. **遵照 Google 官方建議：實作 `ModelService.ListModels` 動態探測**：

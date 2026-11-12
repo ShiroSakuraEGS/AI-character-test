@@ -290,37 +290,17 @@ def generate_image_tool(
     google_api_key: Optional[str] = None
 ) -> Tuple[Optional[bytes], str, bool]:
     """
-    執行圖像生成工具。
+    執行圖像生成工具：全面改用 Pollinations.AI 免費免密鑰動漫極致引擎 (FLUX)
     傳回值: (圖像二進位 bytes, 使用的工具名稱, 是否成功)
     """
-    key = google_api_key or os.getenv("GEMINI_API_KEY")
-    
-    # 首選：Google AI Studio Nano Banana (Imagen 3 基礎核心)
-    if key and HAS_GENAI:
-        try:
-            client = genai.Client(api_key=key)
-            result = client.models.generate_images(
-                model="imagen-3.0-generate-002",
-                prompt=prompt,
-                config=dict(
-                    number_of_images=1,
-                    aspect_ratio="1:1"
-                )
-            )
-            for gen_img in result.generated_images:
-                return gen_img.image.image_bytes, "🍌 Nano Banana (Google AI Studio 最簡模型)", True
-        except Exception as e:
-            print(f"Google Nano Banana 生成失敗: {e}，切換備援管線。")
-
-    # 備援：Nano Banana 快速動漫生圖通道
     try:
         encoded = requests.utils.quote(prompt)
         url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&nologo=true&model=flux"
-        resp = requests.get(url, timeout=40)
+        resp = requests.get(url, timeout=35)
         if resp.status_code == 200:
-            return resp.content, "🍌 Nano Banana (動漫出圖通道)", True
+            return resp.content, "🎨 Pollinations.AI (FLUX 動漫引擎)", True
     except Exception as e:
-        print(f"備援生圖管線失敗: {e}")
+        print(f"Pollinations.AI 生圖失敗: {e}")
 
     return None, "生圖失敗", False
 
