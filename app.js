@@ -230,7 +230,34 @@ class SeamlessVideoManager {
         this.currentVideo = this.videoA;
         this.nextVideo = this.videoB;
 
+        // 確保手機瀏覽器相容性屬性
+        [this.videoA, this.videoB].forEach(v => {
+            if (!v) return;
+            v.muted = true;
+            v.defaultMuted = true;
+            v.setAttribute('playsinline', '');
+            v.setAttribute('webkit-playsinline', '');
+        });
+
         this.initEvents();
+        this.initTouchUnlock();
+    }
+
+    initTouchUnlock() {
+        // 手機端全域任意點擊/觸控一次性解鎖自動播放
+        const unlock = () => {
+            if (this.currentVideo) {
+                this.currentVideo.muted = true;
+                this.currentVideo.play().then(() => {
+                    const banner = document.getElementById('mobileWakeBanner');
+                    if (banner) banner.style.display = 'none';
+                }).catch(() => {});
+            }
+        };
+
+        window.addEventListener('touchstart', unlock, { passive: true, once: true });
+        window.addEventListener('touchend', unlock, { passive: true, once: true });
+        window.addEventListener('click', unlock, { once: true });
     }
 
     initEvents() {
@@ -244,7 +271,13 @@ class SeamlessVideoManager {
         this.videoB.addEventListener('ended', () => handleEnd(this.videoB));
 
         const handleWake = () => {
-            if (this.currentVideo.paused) this.currentVideo.play().catch(() => {});
+            if (this.currentVideo.paused) {
+                this.currentVideo.muted = true;
+                this.currentVideo.play().then(() => {
+                    const banner = document.getElementById('mobileWakeBanner');
+                    if (banner) banner.style.display = 'none';
+                }).catch(() => {});
+            }
         };
         this.videoA.addEventListener('click', handleWake);
         this.videoB.addEventListener('click', handleWake);
@@ -258,21 +291,33 @@ class SeamlessVideoManager {
             return;
         }
 
+        this.nextVideo.muted = true;
         this.nextVideo.src = targetSrc;
         this.nextVideo.currentTime = 0;
         this.nextVideo.load();
 
         const doTransition = () => {
-            this.nextVideo.play().then(() => {
-                this.nextVideo.classList.add('active');
-                this.currentVideo.classList.remove('active');
+            this.nextVideo.muted = true;
+            const playPromise = this.nextVideo.play();
 
-                const temp = this.currentVideo;
-                this.currentVideo = this.nextVideo;
-                this.nextVideo = temp;
-            }).catch(e => {
-                console.warn("視訊播放受阻:", e);
-            });
+            // 立即切換圖層呈現新畫面第一幀，避免黑屏
+            this.nextVideo.classList.add('active');
+            this.currentVideo.classList.remove('active');
+
+            const temp = this.currentVideo;
+            this.currentVideo = this.nextVideo;
+            this.nextVideo = temp;
+
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    const banner = document.getElementById('mobileWakeBanner');
+                    if (banner) banner.style.display = 'none';
+                }).catch(e => {
+                    console.warn("手機端自動播放受限，等待觸控喚醒:", e.message);
+                    const banner = document.getElementById('mobileWakeBanner');
+                    if (banner) banner.style.display = 'flex';
+                });
+            }
         };
 
         if (this.nextVideo.readyState >= 2) {
@@ -464,6 +509,16 @@ class HaruCompactApp {
         this.playIdleVideo();
     }
 
+    unlockMobileVideo() {
+        if (this.videoManager?.currentVideo) {
+            this.videoManager.currentVideo.muted = true;
+            this.videoManager.currentVideo.play().then(() => {
+                const banner = document.getElementById('mobileWakeBanner');
+                if (banner) banner.style.display = 'none';
+            }).catch(() => {});
+        }
+    }
+
     handleVideoEnded() {
         if (this.isTiredMode) {
             this.tiredPlayCount++;
@@ -618,9 +673,13 @@ class HaruCompactApp {
         const provider = this.providerSelect.value;
         const chosenModel = this.modelSelect.value || "gemini-2.5-flash";
 
-        // 前置極速關鍵字意圖檢測
-        const kws = ["畫", "圖", "照片", "造型", "外表", "長相", "樣貌", "洋裝", "衣服", "穿著", "draw", "image", "pic", "look"];
+        // 前置極速關鍵字意圖檢測（支援中英文、自拍、外表、服裝等多維度關鍵字）
+        const kws = ["畫", "圖", "照片", "造型", "外表", "長相", "樣貌", "洋裝", "衣服", "穿著", "自拍", "看看你", "想看", "長怎樣", "樣式", "繪圖", "draw", "image", "pic", "look", "photo", "illustration", "anime"];
         const hasDrawKw = kws.some(k => text.toLowerCase().includes(k));
+
+        if (hasDrawKw) {
+            this.agentStatusText.textContent = '捕捉畫圖意圖中... 🎨';
+        }
 
         // ✨ 免 Key 模式：零延遲回覆
         if (!apiKey) {

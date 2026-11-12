@@ -656,6 +656,32 @@
             transform: translateX(-50%) translateY(0);
         }
 
+        /* 手機端自動播放提示條 */
+        .mobile-wake-banner {
+            position: fixed;
+            top: calc(54px + var(--safe-top));
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 77, 141, 0.88);
+            color: #fff;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.76rem;
+            font-weight: bold;
+            z-index: 1500;
+            display: none;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 15px rgba(255, 77, 141, 0.4);
+            animation: pulseBanner 1.8s infinite ease-in-out;
+            cursor: pointer;
+        }
+
+        @keyframes pulseBanner {
+            0%, 100% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.04); }
+        }
+
         @media (max-width: 600px) {
             .btn-float-icon span.text-label {
                 display: none;
@@ -701,10 +727,15 @@
 
     <!-- ==================== 1. 雙 Video 雙緩衝無縫全螢幕背景 ==================== -->
     <div class="bg-video-wrapper">
-        <!-- 兩座 Video 交叉淡入淡出，消除切換時的黑屏與停頓 -->
-        <video id="videoA" class="bg-video active" autoplay muted playsinline webkit-playsinline preload="auto"></video>
+        <!-- 兩座 Video 交叉淡入淡出，消除切換時的黑屏與停頓；明確配置 muted/playsinline/webkit-playsinline 以相容 iOS 與 Android -->
+        <video id="videoA" class="bg-video active" src="./assets/待機.mp4" autoplay muted playsinline webkit-playsinline preload="auto"></video>
         <video id="videoB" class="bg-video" muted playsinline webkit-playsinline preload="auto"></video>
         <div class="bg-overlay-gradient"></div>
+    </div>
+
+    <!-- 手機端 Autoplay 受阻時的微型觸控喚醒貼心提示 -->
+    <div class="mobile-wake-banner" id="mobileWakeBanner" onclick="window.haruApp?.unlockMobileVideo()">
+        🐾 點擊螢幕任意處，喚醒晴琉！
     </div>
 
     <!-- ==================== 2. 頂部獨立定位按鈕 ==================== -->
