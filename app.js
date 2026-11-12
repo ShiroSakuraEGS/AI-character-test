@@ -2,8 +2,8 @@
  * 🎀 晴琉 (Haru) - 沉浸式可愛小男生 AI Agent 雙模核心引擎 (app.js)
  * 特色：
  * 1. 沉浸式全螢幕背景角色影片 (滿版置中)
- * 2. 下 1/3 半透明極簡對話框 (只顯示最新角色對白 + 使用者輸入框)
- * 3. 獨立浮動按鈕：設定面板、歷史紀錄抽屜、話題快捷列、GitHub 跳轉
+ * 2. 下 1/3 超緊湊半透明極簡對話框 (支援一鍵折疊收起 ▼ / ▲)
+ * 3. 手機端微型晶透按鈕 (Micro UI)
  * 4. 支援 GitHub Pages 純前端直連 (Google Gemini REST API / Groq API / Pollinations 動漫生圖)
  * 5. 視訊播放狀態機：待機 1 ⇄ 待機 2 循環播放，生圖後連續播放「有點累.mp4」3 次
  * 6. 防彈級 JSON 解析與 Reasoning Shield (過濾思考標籤)
@@ -240,10 +240,10 @@ async function generateImageClientSide(prompt) {
 }
 
 // ============================================================
-// 📱 4. 沉浸式應用控制器 (Immersive Controller)
+// 📱 4. 超緊湊應用控制器 (Ultra-Compact App Controller)
 // ============================================================
 
-class HaruImmersiveApp {
+class HaruCompactApp {
     constructor() {
         this.history = [];
         this.isGenerating = false;
@@ -271,6 +271,8 @@ class HaruImmersiveApp {
         this.videoStatusTag = document.getElementById('videoStatusTag');
 
         // 下 1/3 對話框組件
+        this.dialogueCard = document.getElementById('dialogueCard');
+        this.btnToggleMinimize = document.getElementById('btnToggleMinimize');
         this.userLastSpeech = document.getElementById('userLastSpeech');
         this.latestBotReply = document.getElementById('latestBotReply');
         this.imageCardSlot = document.getElementById('imageCardSlot');
@@ -327,13 +329,13 @@ class HaruImmersiveApp {
         if (this.modelSelect) localStorage.setItem('haru_model', this.modelSelect.value);
         if (this.apiKeyInput) localStorage.setItem('haru_api_key', this.apiKeyInput.value.trim());
         if (this.backendModeSelect) localStorage.setItem('haru_backend_mode', this.backendModeSelect.value);
-        this.showToast("💖 設定與 API Key 已安全保存在本機瀏覽器！");
+        this.showToast("💖 設定與 API Key 已儲存！");
     }
 
     clearSettings() {
         localStorage.removeItem('haru_api_key');
         if (this.apiKeyInput) this.apiKeyInput.value = '';
-        this.showToast("🧹 已清除保存的 API Key。");
+        this.showToast("🧹 已清除 API Key。");
     }
 
     async detectEnvironment() {
@@ -341,7 +343,7 @@ class HaruImmersiveApp {
         if (isFileOrGithub && this.backendModeSelect) {
             this.backendModeSelect.value = "client";
             this.backendModeSelect.options[0].disabled = true;
-            this.backendModeSelect.options[0].text += " (GitHub Pages 純前端託管中)";
+            this.backendModeSelect.options[0].text += " (GitHub Pages 純前端)";
         }
     }
 
@@ -352,9 +354,9 @@ class HaruImmersiveApp {
 
         if (provider === 'google') {
             const models = [
-                { id: 'gemini-2.5-flash', name: 'Google: gemini-2.5-flash (推薦最穩定敏捷)' },
-                { id: 'gemini-3.8', name: 'Google: gemini-3.8 (最新旗艦相容)' },
-                { id: 'gemini-1.5-flash', name: 'Google: gemini-1.5-flash (經典超輕量)' }
+                { id: 'gemini-2.5-flash', name: 'Google: gemini-2.5-flash (推薦最穩定)' },
+                { id: 'gemini-3.8', name: 'Google: gemini-3.8 (最新旗艦)' },
+                { id: 'gemini-1.5-flash', name: 'Google: gemini-1.5-flash (輕量高速)' }
             ];
             models.forEach(m => {
                 const opt = document.createElement('option');
@@ -365,8 +367,8 @@ class HaruImmersiveApp {
             });
         } else {
             const models = [
-                { id: 'llama-3.1-8b-instant', name: 'Groq: llama-3.1-8b-instant (極速推理)' },
-                { id: 'llama3-70b-8192', name: 'Groq: llama3-70b-8192 (高智慧旗艦)' }
+                { id: 'llama-3.1-8b-instant', name: 'Groq: llama-3.1-8b-instant (極速)' },
+                { id: 'llama3-70b-8192', name: 'Groq: llama3-70b-8192 (高智慧)' }
             ];
             models.forEach(m => {
                 const opt = document.createElement('option');
@@ -379,7 +381,7 @@ class HaruImmersiveApp {
     }
 
     // ============================================================
-    // 📹 5. 視訊播放狀態機 (全螢幕背景)
+    // 📹 5. 視訊播放狀態機
     // ============================================================
 
     initVideoStateMachine() {
@@ -389,11 +391,10 @@ class HaruImmersiveApp {
             if (this.isTiredMode) {
                 this.tiredPlayCount++;
                 if (this.tiredPlayCount < this.TIRED_MAX_REPEATS) {
-                    this.videoStatusTag.textContent = `[累累充電 ${this.tiredPlayCount + 1}/${this.TIRED_MAX_REPEATS} 💤]`;
+                    this.videoStatusTag.textContent = `[累累 ${this.tiredPlayCount + 1}/${this.TIRED_MAX_REPEATS} 💤]`;
                     this.videoEl.currentTime = 0;
                     this.videoEl.play().catch(e => console.log(e));
                 } else {
-                    // 已滿 3 次，切換回待機循環
                     this.isTiredMode = false;
                     this.tiredPlayCount = 0;
                     this.idleIndex = 0;
@@ -401,13 +402,11 @@ class HaruImmersiveApp {
                     this.playIdleVideo();
                 }
             } else {
-                // 待機 1 與 待機 2 交替循環播放
                 this.idleIndex = (this.idleIndex + 1) % this.IDLE_VIDEOS.length;
                 this.playIdleVideo();
             }
         });
 
-        // 點擊全螢幕視訊喚醒播放
         this.videoEl.addEventListener('click', () => {
             if (this.videoEl.paused) this.videoEl.play();
         });
@@ -434,14 +433,30 @@ class HaruImmersiveApp {
         this.videoEl.load();
         this.videoEl.play().catch(e => console.log(e));
 
-        this.videoStatusTag.textContent = `[累累充電 1/3 💤]`;
+        this.videoStatusTag.textContent = `[累累 1/3 💤]`;
         this.statusDot.className = 'status-dot tired';
-        this.agentStatusText.textContent = `晴琉畫完累累中... 💤`;
+        this.agentStatusText.textContent = `晴琉充電中 💤`;
     }
 
     // ============================================================
-    // 💬 6. 極簡下 1/3 對話更新與歷史紀錄
+    // 💬 6. 超緊湊對話更新與收合模式
     // ============================================================
+
+    toggleMinimizeDialogue() {
+        if (!this.dialogueCard) return;
+        const isMin = this.dialogueCard.classList.toggle('minimized');
+        if (this.btnToggleMinimize) {
+            this.btnToggleMinimize.textContent = isMin ? '▲' : '▼';
+            this.btnToggleMinimize.title = isMin ? '展開對話內容' : '收合對話內容';
+        }
+    }
+
+    ensureDialogueExpanded() {
+        if (this.dialogueCard && this.dialogueCard.classList.contains('minimized')) {
+            this.dialogueCard.classList.remove('minimized');
+            if (this.btnToggleMinimize) this.btnToggleMinimize.textContent = '▼';
+        }
+    }
 
     formatDialogueText(text) {
         let formatted = text.replace(/（(.*?)）/g, '<span class="action-quote">（$1）</span>');
@@ -450,6 +465,7 @@ class HaruImmersiveApp {
     }
 
     updateLatestDialogue({ text, imageUrl = null, imageTool = null, imagePrompt = null }) {
+        this.ensureDialogueExpanded();
         this.latestBotReply.innerHTML = this.formatDialogueText(text);
 
         if (imageUrl) {
@@ -458,14 +474,13 @@ class HaruImmersiveApp {
                 <div class="image-preview-box" id="btnPreviewImage">
                     <img src="${imageUrl}" alt="晴琉畫的圖" />
                     <div class="image-preview-info">
-                        <b>🎨 晴琉畫好啦！(點擊放大查看)</b>
-                        <div style="font-size:0.72rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                            Prompt: ${imagePrompt || 'Gothic Cat-Ear Anime Boy'}
+                        <b>🎨 晴琉畫好啦！(點擊放大)</b>
+                        <div style="font-size:0.68rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                            ${imagePrompt || 'Gothic Cat-Ear Anime Boy'}
                         </div>
                     </div>
                 </div>
             `;
-            // 綁定大圖燈箱點擊事件
             document.getElementById('btnPreviewImage')?.addEventListener('click', () => {
                 this.lightboxImg.src = imageUrl;
                 this.lightboxModal.classList.add('active');
@@ -495,13 +510,13 @@ class HaruImmersiveApp {
         this.isGenerating = true;
         this.btnSend.disabled = true;
 
-        // 更新使用者的最新發言標記
+        this.ensureDialogueExpanded();
         this.userLastSpeech.textContent = `🖤 主人：「${text}」`;
         this.addHistoryRecord('user', text);
         this.history.push({ role: 'user', content: text });
 
-        this.agentStatusText.textContent = '晴琉正在歪頭思考... 💭';
-        this.latestBotReply.innerHTML = `<span style="color:var(--text-dim);">（歪著頭，大大的眼睛眨巴眨巴地望著主人思考著……💭✨）</span>`;
+        this.agentStatusText.textContent = '歪頭思考中... 💭';
+        this.latestBotReply.innerHTML = `<span style="color:var(--text-dim);">（歪了歪頭，大大的眼珠眨巴眨巴地望著主人思考著……💭✨）</span>`;
         this.imageCardSlot.style.display = 'none';
 
         const backendMode = this.backendModeSelect ? this.backendModeSelect.value : 'client';
@@ -514,8 +529,8 @@ class HaruImmersiveApp {
             }
         } catch (err) {
             console.error("對話失敗:", err);
-            this.latestBotReply.innerHTML = `嗚……主人，晴琉的腦袋好像打結了……(つд⊂)💦<br><small style="color:var(--accent-pink);">錯誤原因：${err.message}</small>`;
-            this.agentStatusText.textContent = '連線異常 ⚠️';
+            this.latestBotReply.innerHTML = `嗚……晴琉腦袋打結了……(つд⊂)💦<br><small style="color:var(--accent-pink);">原因：${err.message}</small>`;
+            this.agentStatusText.textContent = '異常 ⚠️';
         } finally {
             this.isGenerating = false;
             this.btnSend.disabled = false;
@@ -563,9 +578,7 @@ class HaruImmersiveApp {
 
         const fullPrompt = `${historyContext}\n主人最新說話：${text}\n${taskGuidance}`;
 
-        this.agentStatusText.textContent = needImage
-            ? '晴琉正在調配顏料準備畫畫... 🎨'
-            : '晴琉正在可愛地回覆... 💖';
+        this.agentStatusText.textContent = needImage ? '調配顏料中... 🎨' : '可愛回覆中... 💖';
 
         const rawReply = await unifiedCallLlm({
             prompt: fullPrompt,
@@ -584,11 +597,11 @@ class HaruImmersiveApp {
         let generatedImg = null;
         if (needImage || imagePrompt) {
             const promptToDraw = imagePrompt || "1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, oversized black hoodie with cat ears, gothic punk aesthetic, masterpiece, best quality";
-            this.agentStatusText.textContent = '晴琉正在使出全力畫圖中！✨';
+            this.agentStatusText.textContent = '全力畫圖中！✨';
             generatedImg = await generateImageClientSide(promptToDraw);
         }
 
-        // 更新下 1/3 對話框
+        // 更新對話框
         this.updateLatestDialogue({
             text: cleanText,
             imageUrl: generatedImg ? generatedImg.imageUrl : null,
@@ -618,7 +631,7 @@ class HaruImmersiveApp {
             })
         });
 
-        if (!response.ok) throw new Error(`本機伺服器錯誤: ${response.statusText}`);
+        if (!response.ok) throw new Error(`本機錯誤: ${response.statusText}`);
 
         const data = await response.json();
         if (!data.success && data.error) throw new Error(data.error);
@@ -642,13 +655,13 @@ class HaruImmersiveApp {
     }
 
     clearChat() {
-        if (!confirm("確定要清空與晴琉的所有對話紀錄嗎？(｡•́︿•̀｡)")) return;
+        if (!confirm("確定要清空與晴琉的對話紀錄嗎？(｡•́︿•̀｡)")) return;
         this.history = [];
         this.historyListContainer.innerHTML = '';
         this.updateLatestDialogue({
-            text: '主人……我們重新開始聊天了喔！今天想要晴琉為您做些什麼呢？(⸝⸝•‧̫•⸝⸝)🐾'
+            text: '主人……我們重新開始聊天了喔！今天想要晴琉做些什麼呢？(⸝⸝•‧̫•⸝⸝)🐾'
         });
-        this.userLastSpeech.textContent = '主人：點擊下方即可開始對話 🐾';
+        this.userLastSpeech.textContent = '主人：點擊下方即可對話 🐾';
         this.showToast("已清空對話紀錄。");
     }
 
@@ -680,8 +693,8 @@ class HaruImmersiveApp {
         setTimeout(() => toast.classList.add('show'), 10);
         setTimeout(() => {
             toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 300);
-        }, 2500);
+            setTimeout(() => toast.remove(), 260);
+        }, 2200);
     }
 
     bindEvents() {
@@ -712,9 +725,14 @@ class HaruImmersiveApp {
             this.drawerOverlay.classList.remove('active');
         });
 
+        // 一鍵收合/展開對話框
+        this.btnToggleMinimize?.addEventListener('click', () => {
+            this.toggleMinimizeDialogue();
+        });
+
         // 快捷話題橫列切換
         this.btnToggleChips?.addEventListener('click', () => {
-            const isHidden = this.quickChipsWrapper.style.display === 'none';
+            const isHidden = window.getComputedStyle(this.quickChipsWrapper).display === 'none';
             this.quickChipsWrapper.style.display = isHidden ? 'flex' : 'none';
         });
 
@@ -746,7 +764,6 @@ class HaruImmersiveApp {
     }
 }
 
-// 頁面加載完成後啟動
 document.addEventListener('DOMContentLoaded', () => {
-    window.haruApp = new HaruImmersiveApp();
+    window.haruApp = new HaruCompactApp();
 });
