@@ -1,15 +1,14 @@
 /**
- * 🎀 晴琉 (Haru) - 沉浸式可愛小男生 AI Agent 雙模核心引擎 (app.js) - 防彈強化版
- * 強化重點：
- * 1. 多模型自動輪替調用鏈 (Fallback Chain): gemini-2.5-flash ➔ gemini-2.0-flash ➔ gemini-1.5-flash ➔ gemini-1.5-pro
- * 2. 智慧雙模切換：自動偵測本地後端 /api/chat，若無後端或處於 GitHub Pages 則平滑切換純前端直連
- * 3. 清楚直觀的 API Key 引導 (未填 Key 時自動彈出面板並溫馨引導，不卡死或拋黑屏)
- * 4. 防彈 JSON 解析與 Reasoning Shield (<think> 標籤過濾)
- * 5. 全螢幕背景影片狀態機 (待機循環 + 畫完累累 x3)
+ * 🎀 晴琉 (Haru) - 沉浸式可愛小男生 AI Agent 雙模核心引擎 (app.js) - v2.3 終極防彈版
+ * 核心特色：
+ * 1. 支援零金鑰免 Key 體驗：即使未填 API Key，晴琉依然可呆萌對話，並透過 Pollinations 免費動漫生圖與播放累累視訊！
+ * 2. 填入 API Key 即可解鎖 Google Gemini / Groq 頂級大模型推理與獨創 Prompt 萃取！
+ * 3. 視訊路徑自動 encodeURI，徹底杜絕中文路徑在 GitHub Pages (Linux / iOS WebKit) 上的相容性問題。
+ * 4. 頂部按鈕原生 onclick 絕對響應，支援一鍵折疊 (▼/▲) 95% 全屏賞角。
  */
 
 // ============================================================
-// 📜 1. 角色設定與 System Prompt
+// 📜 1. 角色設定與智能免金鑰語料庫 (Zero-Key Demo Engine)
 // ============================================================
 
 const HARU_SYSTEM_PROMPT = `
@@ -61,6 +60,28 @@ const INTENT_SYSTEM_PROMPT = `
   "reason": "簡短的判斷原因（繁體中文）"
 }
 `;
+
+/**
+ * 智能免金鑰語料引擎 (即使未填 Key 也能呆萌對答與動漫生圖)
+ */
+function generateOfflineHaruReply(text, isDrawing = false) {
+    if (isDrawing) {
+        const drawReplies = [
+            `……誒？！主人想要看晴琉的樣子嗎？( > ᴗ < )🖤<br><span class="action-quote">（手忙腳亂地從大抽屜裡翻出繪圖板與感壓筆，緊張地眨巴著大眼睛）</span><br>晴、晴琉會使出全力幫主人畫出來的喔！雖然畫完可能會軟趴趴有點累就是了……(｡•́︿•̀｡)💤 主人請看這個畫布魔法！🎀✨`,
+            `主人想看晴琉畫圖嗎……？🥺🖤<br><span class="action-quote">（寬寬的大袖子輕輕擦了擦螢幕，認真地握著數位筆塗塗抹抹）</span><br>晴琉把對主人的喜歡全都畫進這張圖裡了喔！呼……畫完好像全身沒力氣了……主人要摸摸晴琉的頭充電喔！(⸝⸝•‧̫•⸝⸝)🐾🎨`,
+            `……哇！這件衣服晴琉也好想穿給主人看！(๑•̀ㅂ•́)و✧✨<br><span class="action-quote">（興奮地原地轉了一圈，黑粉貓耳兜帽輕輕晃了晃）</span><br>看招！地雷哥特魔法變身！畫好啦……唔……晴琉有點累了……( ¯꒳​¯ )ᐝ💤`
+        ];
+        return drawReplies[Math.floor(Math.random() * drawReplies.length)];
+    }
+
+    const chatReplies = [
+        `主人……主人終於來看晴琉了……！🥺🖤<br><span class="action-quote">（歪了歪頭，寬大的黑色長袖子輕輕晃了晃）</span><br>晴琉今天也很努力地看家喔！今天想和晴琉聊聊什麼呢？也可以叫晴琉畫圖給你看喔！(⸝⸝•‧̫•⸝⸝)🐾💭`,
+        `……呀！主人的聲音……！🖤<br><span class="action-quote">（小耳朵動了動，眼睛亮晶晶地小跑步過來差點踩到衣角）</span><br>晴琉一直都在這裡等主人喔！主人今天過得開心嗎……？( > ᴗ < )🎀`,
+        `主人摸摸晴琉嗎……？(｡•́︿•̀｡)🖤<br><span class="action-quote">（主動把毛茸茸的黑粉碎髮小腦袋蹭到主人的手心旁）</span><br>晴琉最喜歡主人的溫度了……只要主人在身邊，晴琉就充滿活力了喔！(⸝⸝•‧̫•⸝⸝)✨`,
+        `……草莓大福？還是黑巧克力……？💭<br><span class="action-quote">（抱著懷裡的黑兔子布偶，呆萌地眨巴著下垂犬系大眼睛）</span><br>只要是主人給晴琉的點心，晴琉全都最喜歡了喔！主人要吃一口嗎？(๑•̀ㅂ•́)و✧🍓`
+    ];
+    return chatReplies[Math.floor(Math.random() * chatReplies.length)];
+}
 
 // ============================================================
 // 🛡️ 2. 防彈級 JSON 解析與 Reasoning Shield
@@ -194,33 +215,25 @@ async function callSingleGeminiModel(prompt, systemInstruction, apiKey, modelNam
     return cleanReasoningShield(candidateText);
 }
 
-/**
- * 具有自動輪替備援機制的 Google Gemini 呼叫
- */
 async function callGeminiWithFallback(prompt, systemInstruction, apiKey, preferredModel = "gemini-2.5-flash", jsonMode = false) {
-    // 將使用者偏好的模型排在第一位，後面接備援鏈
     const modelsToTry = [preferredModel, ...GEMINI_FALLBACK_MODELS.filter(m => m !== preferredModel)];
     let lastError = null;
 
     for (const model of modelsToTry) {
         try {
-            console.log(`[Gemini API] 正在嘗試模型: ${model}...`);
+            console.log(`[Gemini API] 嘗試連線: ${model}...`);
             const result = await callSingleGeminiModel(prompt, systemInstruction, apiKey, model, jsonMode);
-            console.log(`[Gemini API] 模型 ${model} 呼叫成功！🎉`);
+            console.log(`[Gemini API] 模型 ${model} 成功回傳！`);
             return result;
         } catch (err) {
-            console.warn(`[Gemini API] 模型 ${model} 呼叫失敗:`, err.message);
+            console.warn(`[Gemini API] 模型 ${model} 連線失敗:`, err.message);
             lastError = err;
-            // 繼續輪替下一個模型
         }
     }
 
-    throw lastError || new Error("所有 Gemini 備援模型皆呼叫失敗，請檢查 API Key 是否有效！");
+    throw lastError || new Error("Gemini 模型調用異常，請檢查 API Key 是否正確。");
 }
 
-/**
- * 呼叫 Groq REST API
- */
 async function callGroqRestApi(prompt, systemInstruction, apiKey, modelName = "llama-3.1-8b-instant", jsonMode = false) {
     const endpoint = "https://api.groq.com/openai/v1/chat/completions";
     const messages = [];
@@ -253,16 +266,13 @@ async function callGroqRestApi(prompt, systemInstruction, apiKey, modelName = "l
     return cleanReasoningShield(data.choices?.[0]?.message?.content || "");
 }
 
-/**
- * 統一客戶端 LLM 調用介面
- */
 async function unifiedCallLlm({ prompt, systemInstruction, provider, apiKey, modelName, jsonMode = false }) {
     if (provider === "google") {
         return await callGeminiWithFallback(prompt, systemInstruction, apiKey, modelName || "gemini-2.5-flash", jsonMode);
     } else if (provider === "groq") {
         return await callGroqRestApi(prompt, systemInstruction, apiKey, modelName || "llama-3.1-8b-instant", jsonMode);
     }
-    throw new Error(`不支援的 API 提供商: ${provider}`);
+    throw new Error(`不支援的 API: ${provider}`);
 }
 
 async function generateImageClientSide(prompt) {
@@ -270,7 +280,7 @@ async function generateImageClientSide(prompt) {
     const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=512&height=512&nologo=true&model=flux`;
     return {
         imageUrl: imageUrl,
-        toolName: "Pollinations FLUX (免金鑰動漫生圖)"
+        toolName: "Pollinations FLUX (動漫生圖)"
     };
 }
 
@@ -283,9 +293,9 @@ class HaruCompactApp {
         this.history = [];
         this.isGenerating = false;
 
-        // 視訊播放狀態機
-        this.IDLE_VIDEOS = ['./assets/待機.mp4', './assets/待機2.mp4'];
-        this.TIRED_VIDEO = './assets/有點累.mp4';
+        // 視訊播放狀態機 (使用 encodeURI 確保 GitHub Pages Linux/iOS 完美解析中文路徑)
+        this.IDLE_VIDEOS = [encodeURI('./assets/待機.mp4'), encodeURI('./assets/待機2.mp4')];
+        this.TIRED_VIDEO = encodeURI('./assets/有點累.mp4');
         this.idleIndex = 0;
         this.isTiredMode = false;
         this.tiredPlayCount = 0;
@@ -374,9 +384,9 @@ class HaruCompactApp {
             this.backendModeSelect.value = "client";
             this.backendModeSelect.options[1].disabled = true;
             this.backendModeSelect.options[1].text += " (僅本機伺服器可用)";
-        } else if (!localStorage.getItem('haru_backend_mode')) {
-            // 本機環境下若未指定，自動優先嘗試 local
-            if (this.backendModeSelect) this.backendModeSelect.value = "local";
+            console.log("🌐 正在 GitHub Pages 上運行純靜態模式！");
+        } else if (!localStorage.getItem('haru_backend_mode') && this.backendModeSelect) {
+            this.backendModeSelect.value = "local";
         }
     }
 
@@ -388,8 +398,8 @@ class HaruCompactApp {
         if (provider === 'google') {
             const models = [
                 { id: 'gemini-2.5-flash', name: 'Google: gemini-2.5-flash (推薦最穩定)' },
-                { id: 'gemini-2.0-flash', name: 'Google: gemini-2.0-flash (次世代高速)' },
-                { id: 'gemini-1.5-flash', name: 'Google: gemini-1.5-flash (輕量經典)' },
+                { id: 'gemini-2.0-flash', name: 'Google: gemini-2.0-flash (高速備援)' },
+                { id: 'gemini-1.5-flash', name: 'Google: gemini-1.5-flash (經典輕量)' },
                 { id: 'gemini-3.8', name: 'Google: gemini-3.8 (最新旗艦相容)' }
             ];
             models.forEach(m => {
@@ -419,8 +429,7 @@ class HaruCompactApp {
         this.historyDrawer?.classList.remove('open');
         this.settingsDrawer.classList.add('open');
         this.drawerOverlay.classList.add('active');
-        // 自動聚焦在 API Key 輸入框
-        setTimeout(() => this.apiKeyInput?.focus(), 300);
+        setTimeout(() => this.apiKeyInput?.focus(), 250);
     }
 
     openHistoryDrawer() {
@@ -477,7 +486,7 @@ class HaruCompactApp {
         this.tiredPlayCount = 0;
         this.videoEl.src = this.IDLE_VIDEOS[this.idleIndex];
         this.videoEl.load();
-        this.videoEl.play().catch(() => console.log('點擊螢幕即可自動播放視訊'));
+        this.videoEl.play().catch(() => console.log('等待使用者互動後播放視訊'));
 
         this.videoStatusTag.textContent = `[待機 ${this.idleIndex === 0 ? '1' : '2'}]`;
         this.statusDot.className = 'status-dot';
@@ -528,9 +537,9 @@ class HaruCompactApp {
                 <div class="image-preview-box" id="btnPreviewImage">
                     <img src="${imageUrl}" alt="晴琉畫的圖" />
                     <div class="image-preview-info">
-                        <b>🎨 晴琉畫好啦！(點擊放大)</b>
+                        <b>🎨 晴琉畫好啦！(點擊放大查看)</b>
                         <div style="font-size:0.68rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                            ${imagePrompt || 'Gothic Cat-Ear Anime Boy'}
+                            ${imagePrompt || 'Cute Gothic Anime Boy'}
                         </div>
                     </div>
                 </div>
@@ -574,38 +583,28 @@ class HaruCompactApp {
         this.imageCardSlot.style.display = 'none';
 
         const backendMode = this.backendModeSelect ? this.backendModeSelect.value : 'client';
+        const apiKey = this.apiKeyInput ? this.apiKeyInput.value.trim() : '';
 
         try {
             if (backendMode === 'local') {
                 try {
                     await this.sendViaLocalServer(text);
                 } catch (localErr) {
-                    console.warn("本地後端無法連線，自動平滑切換至純前端直連:", localErr.message);
-                    await this.sendViaClientSide(text);
+                    console.warn("本地後端未開，切換純前端直連:", localErr.message);
+                    await this.sendViaClientSide(text, apiKey);
                 }
             } else {
-                await this.sendViaClientSide(text);
+                await this.sendViaClientSide(text, apiKey);
             }
         } catch (err) {
             console.error("對話連線異常:", err);
-            
-            // 溫馨引導：若為 API Key 未填寫
-            if (err.message.includes("API Key")) {
-                this.latestBotReply.innerHTML = `
-                    ……主人？晴琉的心靈感應水晶（API Key）好像還沒填上喔！🥺🖤<br>
-                    <span class="action-quote">（拉了拉寬寬的長袖子，指著右邊開啟的設定面板）</span><br>
-                    請在右側貼上您的 Google Gemini API Key（或 Groq Key），晴琉就能馬上陪您聊天畫圖了！(⸝⸝•‧̫•⸝⸝)🐾
-                `;
-                this.agentStatusText.textContent = '等待設定 Key 🔑';
-            } else {
-                this.latestBotReply.innerHTML = `
-                    嗚……晴琉的腦袋好像打結了……(つд⊂)💦<br>
-                    <span class="action-quote">（緊張地抱緊了黑兔子布偶）</span><br>
-                    <small style="color:var(--accent-pink);">錯誤原因：${err.message}</small><br>
-                    <small style="color:var(--text-dim);">提示：請確認右上角「⚙️ 設定」中的 API Key 是否正確。</small>
-                `;
-                this.agentStatusText.textContent = '連線異常 ⚠️';
-            }
+            this.latestBotReply.innerHTML = `
+                嗚……晴琉的腦袋好像打結了……(つд⊂)💦<br>
+                <span class="action-quote">（緊張地抱緊了黑兔子布偶）</span><br>
+                <small style="color:var(--accent-pink);">錯誤原因：${err.message}</small><br>
+                <small style="color:var(--text-dim);">提示：請點擊右上角「⚙️ 設定」貼上您的 Google Gemini API Key 喔！</small>
+            `;
+            this.agentStatusText.textContent = '異常 ⚠️';
         } finally {
             this.isGenerating = false;
             this.btnSend.disabled = false;
@@ -613,18 +612,47 @@ class HaruCompactApp {
         }
     }
 
-    async sendViaClientSide(text) {
+    async sendViaClientSide(text, apiKey) {
         const provider = this.providerSelect.value;
         const modelName = this.modelSelect.value;
-        const apiKey = this.apiKeyInput.value.trim();
 
+        // 判斷是否為生圖請求
+        const kws = ["畫", "圖", "照片", "造型", "外表", "長相", "樣貌", "洋裝", "衣服", "穿著", "draw", "image", "pic"];
+        let needImage = kws.some(k => text.toLowerCase().includes(k));
+
+        // ✨ 若未填寫 API Key，啟動「免金鑰智能互動與免金鑰生圖模式」！
         if (!apiKey) {
-            this.openSettingsDrawer();
-            throw new Error("未填寫 API Key");
+            console.log("未檢測到 API Key，自動以免金鑰智能模式提供陪伴！");
+            await new Promise(r => setTimeout(r, 600)); // 模擬可愛思考
+
+            let offlineReply = generateOfflineHaruReply(text, needImage);
+            let generatedImg = null;
+
+            if (needImage) {
+                this.agentStatusText.textContent = '全力畫圖中！✨';
+                const defaultPrompt = "1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, oversized black hoodie with cat ears, gothic punk aesthetic, masterpiece, best quality";
+                generatedImg = await generateImageClientSide(defaultPrompt);
+            }
+
+            this.history.push({ role: 'assistant', content: offlineReply });
+            this.addHistoryRecord('assistant', offlineReply);
+
+            this.updateLatestDialogue({
+                text: offlineReply + `<br><small style="color:var(--text-dim); display:inline-block; margin-top:4px;">💡 提示：點擊右上角「⚙️ 設定」貼上 Gemini API Key 可解鎖無限話題深度對話喔！</small>`,
+                imageUrl: generatedImg ? generatedImg.imageUrl : null,
+                imageTool: generatedImg ? generatedImg.toolName : null,
+                imagePrompt: "Gothic Cat-Ear Anime Boy"
+            });
+
+            if (needImage) {
+                this.triggerTiredVideo();
+            } else {
+                this.agentStatusText.textContent = '晴琉在線中 🐾';
+            }
+            return;
         }
 
-        // 1. 意圖判定 (失敗時自動關鍵字備援，絕不拋錯)
-        let needImage = false;
+        // ==================== 已有 API Key：調用頂級模型推理 ====================
         try {
             const intentRaw = await unifiedCallLlm({
                 prompt: `使用者輸入：${text}`,
@@ -637,11 +665,9 @@ class HaruCompactApp {
             const parsedIntent = bulletproofJsonParse(intentRaw);
             needImage = Boolean(parsedIntent.need_image);
         } catch (e) {
-            const kws = ["畫", "圖", "照片", "造型", "外表", "長相", "樣貌", "洋裝", "衣服", "穿著", "draw", "image", "pic"];
-            needImage = kws.some(k => text.toLowerCase().includes(k));
+            // 關鍵字備援，絕不拋錯
         }
 
-        // 2. 構建上下文與對話生成
         let historyContext = "【歷史對話】:\n";
         this.history.slice(-6).forEach(m => {
             const name = m.role === 'user' ? '主人' : '晴琉';
@@ -653,7 +679,6 @@ class HaruCompactApp {
             : "【注意】：此為一般日常閒聊，請勿輸出 `<image_prompt>` 標籤，專注於呆萌可愛的三段式對話互動。";
 
         const fullPrompt = `${historyContext}\n主人最新說話：${text}\n${taskGuidance}`;
-
         this.agentStatusText.textContent = needImage ? '調配顏料中... 🎨' : '可愛回覆中... 💖';
 
         const rawReply = await unifiedCallLlm({
@@ -669,7 +694,6 @@ class HaruCompactApp {
         this.history.push({ role: 'assistant', content: cleanText });
         this.addHistoryRecord('assistant', cleanText);
 
-        // 3. 生圖處理
         let generatedImg = null;
         if (needImage || imagePrompt) {
             const promptToDraw = imagePrompt || "1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, oversized black hoodie with cat ears, gothic punk aesthetic, masterpiece, best quality";
@@ -677,7 +701,6 @@ class HaruCompactApp {
             generatedImg = await generateImageClientSide(promptToDraw);
         }
 
-        // 更新對話框
         this.updateLatestDialogue({
             text: cleanText,
             imageUrl: generatedImg ? generatedImg.imageUrl : null,
@@ -685,7 +708,6 @@ class HaruCompactApp {
             imagePrompt: imagePrompt
         });
 
-        // 4. 狀態機切換
         if (needImage || imagePrompt) {
             this.triggerTiredVideo();
         } else {
