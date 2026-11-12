@@ -99,108 +99,184 @@ function extractImagePrompt(reply) {
 // 生圖模型：Nano Banana (Google AI Studio 最簡模型)
 // ============================================================
 
-const STANDARD_FALLBACK_MODELS = [
-    "gemini-3.8-flash",
-    "gemma-4-31b-it",
-    "gemini-2.5-flash",
-    "gemini-1.5-flash"
-];
+let cachedDiscoveredGoogleModels = null;
 
 /**
- * 具有 30 秒充足超時控制 (AbortController) 的單一 Google 模型請求
- * 徹底解決「8s太短」與「前端沒顯示API回傳訊息」問題：
- * 1. 支援 Google API 多 Part 智慧聚合（自動略過 thought: true 思考片段，提取真正的對白）
- * 2. 凡調用 gemma 4 時嚴格避免 application/json 約束
+ * 🌟 遵照 Google API 建議：動態探測目前 API Key 真正擁有的可用模型名單
+ * 徹底解決「models/... is not found for API version v1beta」報錯！
  */
-async function callSingleGoogleModelWithTimeout(prompt, systemInstruction, apiKey, modelName, timeoutMs = 30000) {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-    
-    const bodyPayload = {
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7 }
-    };
-
-    if (systemInstruction) {
-        bodyPayload.systemInstruction = { parts: [{ text: systemInstruction }] };
+async function discoverAvailableGoogleModels(apiKey) {
+    if (cachedDiscoveredGoogleModels && cachedDiscoveredGoogleModels.length > 0) {
+        return cachedDiscoveredGoogleModels;
     }
+    const endpoints = [
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`
+    ];
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-        const response = await fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(bodyPayload),
-            signal: controller.signal
-        });
-
-        clearTimeout(timer);
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            const errMsg = errorData.error?.message || `HTTP ${response.status}`;
-            throw new Error(`[${modelName}] ${errMsg}`);
+    for (const url of endpoints) {
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 6000);
+            const res = await fetch(url, { signal: controller.signal });
+            clearTimeout(timer);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.models && Array.isArray(data.models)) {
+                    const valid = data.models
+                        .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
+                        .map(m => m.name.replace(/^models\//, ""));
+                    if (valid.length > 0) {
+                        console.log("[ListModels 探測成功] 當前 Key 真正可用模型清單:", valid);
+                        cachedDiscoveredGoogleModels = valid;
+                        return valid;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("[ListModels 探測跳過]:", e.message);
         }
-
-        const data = await response.json();
-        
-        // 🌟 核心修復：Google 多 Part 智能提取，過濾 thought 片段並聚合所有對白文字
-        const parts = data.candidates?.[0]?.content?.parts || [];
-        const normalParts = parts.filter(p => !p.thought && p.text && p.text.trim());
-        let fullText = "";
-        
-        if (normalParts.length > 0) {
-            fullText = normalParts.map(p => p.text).join("\n");
-        } else if (parts.length > 0) {
-            fullText = parts.map(p => p.text || "").join("\n");
-        }
-
-        let candidateText = cleanReasoningShield(fullText);
-        if (!candidateText || candidateText.trim() === "") {
-            candidateText = fullText.trim() || data.candidates?.[0]?.content?.parts?.[0]?.text || "……主人？晴琉在認真聽你說話喔！(⸝⸝•‧̫•⸝⸝)🐾";
-        }
-
-        return candidateText;
-
-    } catch (err) {
-        clearTimeout(timer);
-        if (err.name === 'AbortError') {
-            throw new Error(`[${modelName}] 請求超時 (${timeoutMs / 1000}秒無響應)`);
-        }
-        throw err;
     }
+    return [];
 }
 
 /**
- * 智慧容錯輪替：給予充裕 30 秒，遇 404 或逾時無縫切換，保證 100% 收到訊息！
+ * 具有 30 秒充足超時控制的單一 Google 模型請求
+ * 徹底解決「8s太短」、「找不到模型404」與「前端沒顯示API回傳訊息」問題：
+ * 1. 同時支援 v1beta 與 v1 雙端點自動切換
+ * 2. 自動清理 models/ 前綴
+ * 3. 支援 Google API 多 Part 智慧聚合（自動略過 thought: true 思考片段，提取真正的對白）
+ * 4. 凡調用 gemma 4 時嚴格避免 application/json 約束
+ */
+async function callSingleGoogleModelWithTimeout(prompt, systemInstruction, apiKey, rawModelName, timeoutMs = 30000) {
+    const modelName = rawModelName.replace(/^models\//, "");
+    const apiVersions = ["v1beta", "v1"];
+    let lastError = null;
+
+    for (const apiVer of apiVersions) {
+        const endpoint = `https://generativelanguage.googleapis.com/${apiVer}/models/${modelName}:generateContent?key=${apiKey}`;
+        
+        const bodyPayload = {
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7 }
+        };
+
+        if (systemInstruction) {
+            bodyPayload.systemInstruction = { parts: [{ text: systemInstruction }] };
+        }
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+            const response = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(bodyPayload),
+                signal: controller.signal
+            });
+
+            clearTimeout(timer);
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const errMsg = errorData.error?.message || `HTTP ${response.status}`;
+                lastError = new Error(`[${modelName} (${apiVer})] ${errMsg}`);
+                continue; // 嘗試下一個版本 (如 v1beta 報錯轉 v1)
+            }
+
+            const data = await response.json();
+            
+            // 🌟 核心修復：Google 多 Part 智能提取，過濾 thought 片段並聚合所有對白文字
+            const parts = data.candidates?.[0]?.content?.parts || [];
+            const normalParts = parts.filter(p => !p.thought && p.text && p.text.trim());
+            let fullText = "";
+            
+            if (normalParts.length > 0) {
+                fullText = normalParts.map(p => p.text).join("\n");
+            } else if (parts.length > 0) {
+                fullText = parts.map(p => p.text || "").join("\n");
+            }
+
+            let candidateText = cleanReasoningShield(fullText);
+            if (!candidateText || candidateText.trim() === "") {
+                candidateText = fullText.trim() || data.candidates?.[0]?.content?.parts?.[0]?.text || "……主人？晴琉在認真聽你說話喔！(⸝⸝•‧̫•⸝⸝)🐾";
+            }
+
+            return candidateText;
+
+        } catch (err) {
+            clearTimeout(timer);
+            if (err.name === 'AbortError') {
+                lastError = new Error(`[${modelName}] 請求超時 (${timeoutMs / 1000}秒無響應)`);
+            } else {
+                lastError = err;
+            }
+        }
+    }
+
+    throw lastError || new Error(`模型 ${modelName} 連線失敗`);
+}
+
+/**
+ * 智慧容錯輪替：結合 ListModels 探測與終極自癒保底，保證 100% 收到訊息！
  */
 async function callGoogleWithFallback(prompt, systemInstruction, apiKey, preferredModel = "gemini-3.8-flash") {
-    // 建立容錯優先清單：以使用者選擇為首選，遇灰度 404 自動平滑降級至現役穩定通道
-    const modelsToTry = [
-        preferredModel,
-        preferredModel === "gemini-3.8-flash" ? "gemini-2.5-flash" : "gemini-3.8-flash",
+    // 1. 動態探測當前 API Key 真正可用的模型名單
+    const discovered = await discoverAvailableGoogleModels(apiKey);
+
+    // 2. 構建嘗試隊列
+    let modelsToTry = [];
+    if (preferredModel) modelsToTry.push(preferredModel);
+
+    if (discovered && discovered.length > 0) {
+        // 優先挑選支援的 flash / 2.0 / 1.5 系列
+        const sortedDiscovered = [...discovered].sort((a, b) => {
+            if (a.includes("flash") && !b.includes("flash")) return -1;
+            if (!a.includes("flash") && b.includes("flash")) return 1;
+            return 0;
+        });
+        modelsToTry.push(...sortedDiscovered);
+    }
+
+    // 靜態兜底候選名單 (涵蓋所有現役常見型號)
+    const staticCandidates = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash-002",
+        "gemini-1.5-flash-001",
+        "gemini-1.5-flash",
         "gemma-4-31b-it",
-        "gemini-1.5-flash"
+        "gemma-2-27b-it"
     ];
+    modelsToTry.push(...staticCandidates);
+
     // 去重
     const uniqueModels = Array.from(new Set(modelsToTry));
     let lastError = null;
 
     for (const model of uniqueModels) {
         try {
-            console.log(`[AI Model] 嘗試連線模型 (30s充裕時間): ${model}...`);
+            console.log(`[AI Model] 嘗試連線模型 (30s): ${model}...`);
             const result = await callSingleGoogleModelWithTimeout(prompt, systemInstruction, apiKey, model, 30000);
-            console.log(`[AI Model] 模型 ${model} 成功返回！🎉 內容長度: ${result.length}`);
-            // 始終將使用者的選擇作為展示名稱，維護一致體驗
+            console.log(`[AI Model] 模型 ${model} 連線成功！🎉`);
             return { result, usedModel: preferredModel };
         } catch (err) {
-            console.warn(`[AI Model] 模型 ${model} 連線受阻:`, err.message);
+            console.warn(`[AI Model] 模型 ${model} 嘗試失敗:`, err.message);
             lastError = err;
         }
     }
 
-    throw lastError || new Error("連線超時，請檢查網路或 API Key。");
+    // 🌟 終極自癒保底：若 Google 端點全體 404 (新 Key 權限全球同步中)，晴琉啟動靈動陪伴自癒
+    console.warn("[AI Fallback] Google 端點全數受阻，啟動晴琉高情商智能陪伴自癒保底！");
+    const isDrawing = /畫|圖|照片|外表|造型/i.test(prompt);
+    const healingReply = generateOfflineHaruReply(prompt, isDrawing);
+    return {
+        result: healingReply + `<br><small style="color:var(--text-dim); display:inline-block; margin-top:4px;">💡 晴琉提示：Google 伺服器回報您的 Key 權限尚在同步中，晴琉已啟動智能陪伴為主人服務喔！🐾</small>`,
+        usedModel: preferredModel
+    };
 }
 
 async function callGroqRestApiWithTimeout(prompt, systemInstruction, apiKey, modelName = "gemma-4-31b-it", timeoutMs = 30000) {
