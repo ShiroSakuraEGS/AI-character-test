@@ -56,8 +56,8 @@ flowchart TD
 ### 2. 生圖工具調用 (Pollinations.AI 整合)
 - **觸發條件**：回覆中含有 `<image_prompt>` 或前端命中生圖意圖。
 - **生圖引擎**：
-  - **全面採用 Pollinations.AI (FLUX 動漫極致引擎)**：
-  - 免 API Key、免綁卡、零額度限制、無 CORS 阻礙，即時高速出圖，畫質細膩穩定。
+  - **全面採用 Pollinations.AI (Turbo 極速動漫引擎)**：
+  - 採用高並發 `model=turbo` 架構，徹底解決 `FLUX` 模型在高峰期容易遭遇的「At its limit right now」伺服器排隊爆滿限制，秒級極速出圖，畫質細膩穩定。
 - **渲染與燈箱**：出圖後於對話框上方以 38px 微型縮圖呈現，點擊可開啟全螢幕大圖燈箱（Lightbox）。
 
 ### 3. 角色視訊狀態機 (Video FSM)

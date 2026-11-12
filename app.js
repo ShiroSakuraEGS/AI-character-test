@@ -321,16 +321,17 @@ async function callGroqRestApiWithTimeout(prompt, systemInstruction, apiKey, mod
 
 /**
  * 🎨 Pollinations.AI 客戶端極致動漫生圖引擎
- * 全面改用 Pollinations.AI：完全免密鑰、零額度限制、即時出圖！
+ * 採用高並發極速 turbo 模型，徹底消除「At its limit right now」伺服器排隊排滿問題！
  */
 async function generateImagePollinations(prompt) {
-    console.log("[Pollinations.AI] 啟動極致動漫出圖:", prompt);
+    console.log("[Pollinations.AI] 啟動極速動漫出圖:", prompt);
     const cleanPrompt = encodeURIComponent(prompt);
     const seed = Math.floor(Math.random() * 1000000);
-    const imageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=512&height=512&nologo=true&model=flux&seed=${seed}`;
+    // 使用 turbo 引擎替代龐大的 flux，確保 100% 穩定秒出圖、不塞車！
+    const imageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=512&height=512&nologo=true&model=turbo&seed=${seed}`;
     return {
         imageUrl: imageUrl,
-        toolName: "🎨 Pollinations.AI (FLUX 動漫引擎)"
+        toolName: "🎨 Pollinations.AI (Turbo 動漫極速引擎)"
     };
 }
 

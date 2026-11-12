@@ -295,10 +295,10 @@ def generate_image_tool(
     """
     try:
         encoded = requests.utils.quote(prompt)
-        url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&nologo=true&model=flux"
+        url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&nologo=true&model=turbo"
         resp = requests.get(url, timeout=35)
         if resp.status_code == 200:
-            return resp.content, "🎨 Pollinations.AI (FLUX 動漫引擎)", True
+            return resp.content, "🎨 Pollinations.AI (Turbo 極速動漫引擎)", True
     except Exception as e:
         print(f"Pollinations.AI 生圖失敗: {e}")
 
