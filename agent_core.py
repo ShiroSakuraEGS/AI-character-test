@@ -172,8 +172,8 @@ def call_llm(
             system_instruction=system_instruction or None,
             response_mime_type="application/json" if json_mode else "text/plain"
         )
-        # 依序嘗試多模型備援鏈 (SOP Fallback Chain)
-        candidate_models = [model_name or "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+        # 依序嘗試多模型備援鏈 (SOP Fallback Chain: 3.8 Flash -> 2.5 Flash -> Gemma 4 31B -> 1.5 Flash)
+        candidate_models = [model_name or "gemini-3.8-flash", "gemini-3.8-flash", "gemini-2.5-flash", "gemma-4-31b-it", "gemini-2.0-flash", "gemini-1.5-flash"]
         # 去重且保留順序
         models_to_try = []
         for m in candidate_models:
@@ -183,17 +183,23 @@ def call_llm(
         last_exc = None
         for m in models_to_try:
             try:
+                # 凡調用 gemma 模型時，嚴格避免傳入 response_mime_type="application/json"
+                is_gemma = "gemma" in m.lower()
+                current_config = types.GenerateContentConfig(
+                    system_instruction=system_instruction or None,
+                    response_mime_type=None if is_gemma else ("application/json" if json_mode else "text/plain")
+                )
                 response = client.models.generate_content(
                     model=m,
                     contents=prompt,
-                    config=config
+                    config=current_config
                 )
                 return clean_reasoning_shield(response.text or "")
             except Exception as e:
                 print(f"[Gemini Fallback] 模型 {m} 嘗試失敗: {e}，切換下一個備援模型...")
                 last_exc = e
 
-        raise last_exc or ValueError("所有 Gemini 備援模型皆呼叫失敗，請檢查 API Key 是否有效！")
+        raise last_exc or ValueError("所有備援模型皆呼叫失敗，請檢查 API Key 是否有效！")
 
     elif provider == "groq":
         key = api_key or os.getenv("GROQ_API_KEY")
