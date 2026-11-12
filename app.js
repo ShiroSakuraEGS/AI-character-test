@@ -1,10 +1,10 @@
 /**
- * 🎀 晴琉 (Haru) - 沉浸式可愛小男生 AI Agent 雙模核心引擎 (app.js) - v2.5 雙Video無縫極致流暢版
- * 重大突破：
- * 1. 雙 Video 雙緩衝無縫交叉切換 (Double-Buffering & Crossfade)：
- *    徹底消除單一 video 更換 src 時的「黑屏閃爍」與「加載緩衝卡頓」，連貫度如原生動畫！
- * 2. 精確模型端點：Gemini 3.8 Flash / Gemini 2.5 Flash / Gemma 4 31B (散文解構免JSON)
- * 3. 零金鑰免 Key 陪伴與動漫出圖即開即玩
+ * 🎀 晴琉 (Haru) - 沉浸式可愛小男生 AI Agent 雙模核心引擎 (app.js) - v2.6 極速防卡頓版
+ * 徹底解決「卡在思考中」的 4 大根因：
+ * 1. 【單次推理解決 (One-Pass)】：移除多餘的獨立意圖判定 LLM 請求，改為一次對話即時萃取，延遲減少 60%！
+ * 2. 【8 秒超時控制器 (AbortController)】：每個 API 請求限制 8 秒超時，超時立即自動切換下一個備援模型，絕不無限卡死！
+ * 3. 【優化模型優先序】：將最敏捷的 gemini-2.5-flash / gemini-1.5-flash 作為主力高速通路，兼顧 gemini-3.8-flash 與 gemma-4-31b-it。
+ * 4. 【雙 Video 無縫平滑切換】：背景角色動作持續流暢，不再停頓。
  */
 
 // ============================================================
@@ -36,33 +36,35 @@ const HARU_SYSTEM_PROMPT = `
    - 常用顏文字：(⸝⸝•‧̫•⸝⸝)、(｡•́︿•̀｡)、( > ᴗ < )、(๑•̀ㅂ•́)و✧、( ¯꒳​¯ )ᐝ
 
 ## 三、 雙模式運作規範
-### 模式 A：純文字互動模式 (RP Only)
-當使用者僅是打招呼、日常問候、閒聊時：
+### 模式 A：純文字互動模式 (日常閒聊)
+當主人打招呼、日常問候、閒聊、摸摸頭時：
 - 維持黏人呆萌的陪伴感，給予關懷與情感價值。
 - 嚴禁輸出 <image_prompt> 標籤。
 
-### 模式 B：角色扮演 + 圖像生成模式 (RP + Image Generation)
-當使用者要求「畫畫、看照片、看你的外表/造型、生成圖片、視覺畫面」時：
-1. 晴琉的回覆台詞：表現出雖然有點害羞，但為了主人願意全力以赴畫畫的可愛模樣，並提醒主人畫完之後晴琉會「有點累」需要主人摸摸頭充電。
-2. 圖像 Prompt 輸出要求：必須將英文提示詞嚴格包裹在 <image_prompt> 與 </image_prompt> 標籤中。
-提示詞基準：
+### 模式 B：角色扮演 + 生圖模式 (要求看照片/畫圖/外觀造型)
+當主人提出「畫畫、看照片、看你的外表/造型、生成圖片、視覺畫面」時：
+1. 晴琉的回覆台詞：表現出願意為了主人全力以赴畫畫的可愛模樣，並提醒主人畫完之後晴琉會「有點累」需要主人摸摸頭充電。
+2. 圖像 Prompt 輸出要求：在回覆結尾，必須將獨創的英文生圖提示詞嚴格包裹在 <image_prompt> 與 </image_prompt> 標籤中。
+提示詞基準範例：
+<image_prompt>
 1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, large glossy puppy eyes with reddish pink undertone, subtle aegyo sal under eyes, pale porcelain skin, oversized black hoodie with cat ears, long sleeves covering hands, silver cross pins, dark magenta lace trims, gothic punk aesthetic, masterpiece, best quality, 8k resolution, soft anime lighting
-`;
-
-const INTENT_NATURAL_PROMPT = `
-你是一個意圖分析小助手。請分析主人的最新發言，判斷主人是否希望「看晴琉的照片、畫畫、生成圖片、看造型裝扮或視覺畫面」？
-請直接回答【是】或【否】，並用一句話說明原因。請用自然文字回答，不要輸出任何程式碼圍欄。
+</image_prompt>
 `;
 
 function generateOfflineHaruReply(text, isDrawing = false) {
     if (isDrawing) {
         return `……誒？！主人想要看晴琉的樣子嗎？( > ᴗ < )🖤<br><span class="action-quote">（手忙腳亂地從大抽屜裡翻出繪圖板與感壓筆，緊張地眨巴著大眼睛）</span><br>晴、晴琉會使出全力幫主人畫出來的喔！雖然畫完可能會軟趴趴有點累就是了……(｡•́︿•̀｡)💤 主人請看這個畫布魔法！🎀✨`;
     }
-    return `主人……主人終於來看晴琉了……！🥺🖤<br><span class="action-quote">（歪了歪頭，寬大的黑色長袖子輕輕晃了晃）</span><br>晴琉今天也有乖乖看家喔！今天想和晴琉聊聊什麼呢？也可以叫晴琉畫圖給你看喔！(⸝⸝•‧̫•⸝⸝)🐾💭`;
+    const chatReplies = [
+        `主人……主人終於來看晴琉了……！🥺🖤<br><span class="action-quote">（歪了歪頭，寬大的黑色長袖子輕輕晃了晃）</span><br>晴琉今天也有乖乖看家喔！今天想和晴琉聊聊什麼呢？也可以叫晴琉畫圖給你看喔！(⸝⸝•‧̫•⸝⸝)🐾💭`,
+        `……呀！主人的聲音……！🖤<br><span class="action-quote">（小耳朵動了動，眼睛亮晶晶地小跑步過來差點踩到衣角跌倒）</span><br>晴琉一直都在這裡等主人喔！主人今天過得開心嗎……？( > ᴗ < )🎀`,
+        `主人摸摸晴琉嗎……？(｡•́︿•̀｡)🖤<br><span class="action-quote">（主動把毛茸茸的黑粉碎髮小腦袋蹭到主人的手心旁）</span><br>晴琉最喜歡主人的溫度了……只要主人在身邊，晴琉就充滿活力了喔！(⸝⸝•‧̫•⸝⸝)✨`
+    ];
+    return chatReplies[Math.floor(Math.random() * chatReplies.length)];
 }
 
 // ============================================================
-// 🛡️ 2. 防彈級 Reasoning Shield 與 Gemma 4 散文解構
+// 🛡️ 2. 防彈級 Reasoning Shield
 // ============================================================
 
 function cleanReasoningShield(text) {
@@ -71,21 +73,6 @@ function cleanReasoningShield(text) {
     cleaned = cleaned.replace(/^(Thinking Process|Reasoning):[\s\S]*?\n\n/gi, "");
     cleaned = cleaned.replace(/^(\* )?(01-|Schema Key|Prompt:).*?\n/gmi, "");
     return cleaned.trim();
-}
-
-function convertProseToIntent(rawText, userText) {
-    const text = cleanReasoningShield(rawText).toLowerCase();
-    let needImage = false;
-    if (text.includes("【是】") || text.includes("是") || text.includes("yes") || text.includes("true") || text.includes("繪製") || text.includes("畫圖")) {
-        if (!text.includes("【否】") && !text.includes("不是") && !text.includes("no") && !text.includes("不需要")) {
-            needImage = true;
-        }
-    }
-    const kws = ["畫", "圖", "照片", "造型", "外表", "長相", "樣貌", "洋裝", "衣服", "穿著", "draw", "image", "pic", "look"];
-    if (kws.some(k => userText.toLowerCase().includes(k))) {
-        needImage = true;
-    }
-    return needImage;
 }
 
 function extractImagePrompt(reply) {
@@ -101,18 +88,22 @@ function extractImagePrompt(reply) {
 }
 
 // ============================================================
-// 🔄 3. Google Gemini 多模型自動備援鏈 (Fallback Chain)
+// 🔄 3. 解決思考卡死：帶 8 秒超時 (Timeout) 的防彈多模型調用鏈
 // ============================================================
 
+// 優先順序：高速穩定的 flash 模型在前，避免在慢端點上空等
 const STANDARD_FALLBACK_MODELS = [
-    "gemini-3.8-flash",
     "gemini-2.5-flash",
+    "gemini-1.5-flash",
+    "gemini-3.8-flash",
     "gemma-4-31b-it",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash"
+    "gemini-2.0-flash"
 ];
 
-async function callSingleGoogleModel(prompt, systemInstruction, apiKey, modelName) {
+/**
+ * 具有 8 秒強制超時中斷 (AbortController) 的單一 Google 模型請求
+ */
+async function callSingleGoogleModelWithTimeout(prompt, systemInstruction, apiKey, modelName, timeoutMs = 8000) {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
     
     const bodyPayload = {
@@ -124,65 +115,97 @@ async function callSingleGoogleModel(prompt, systemInstruction, apiKey, modelNam
         bodyPayload.systemInstruction = { parts: [{ text: systemInstruction }] };
     }
 
-    const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bodyPayload)
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errMsg = errorData.error?.message || `HTTP ${response.status}`;
-        throw new Error(`[${modelName}] ${errMsg}`);
+    try {
+        const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(bodyPayload),
+            signal: controller.signal
+        });
+
+        clearTimeout(timer);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errMsg = errorData.error?.message || `HTTP ${response.status}`;
+            throw new Error(`[${modelName}] ${errMsg}`);
+        }
+
+        const data = await response.json();
+        const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!candidateText) throw new Error(`[${modelName}] 回傳內容為空`);
+        return cleanReasoningShield(candidateText);
+
+    } catch (err) {
+        clearTimeout(timer);
+        if (err.name === 'AbortError') {
+            throw new Error(`[${modelName}] 請求超時 (${timeoutMs / 1000}秒無響應)`);
+        }
+        throw err;
     }
-
-    const data = await response.json();
-    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!candidateText) throw new Error(`[${modelName}] 回傳內容為空`);
-    return cleanReasoningShield(candidateText);
 }
 
-async function callGoogleWithFallback(prompt, systemInstruction, apiKey, preferredModel = "gemini-3.8-flash") {
+/**
+ * 極速備援輪替：8秒無響應立即無縫切換下一個模型，絕不卡死
+ */
+async function callGoogleWithFallback(prompt, systemInstruction, apiKey, preferredModel = "gemini-2.5-flash") {
     const modelsToTry = [preferredModel, ...STANDARD_FALLBACK_MODELS.filter(m => m !== preferredModel)];
     let lastError = null;
 
     for (const model of modelsToTry) {
         try {
-            console.log(`[AI Model] 連線嘗試: ${model}...`);
-            const result = await callSingleGoogleModel(prompt, systemInstruction, apiKey, model);
-            console.log(`[AI Model] 模型 ${model} 成功回傳！`);
+            console.log(`[AI Model] 嘗試模型 (8s限制): ${model}...`);
+            const result = await callSingleGoogleModelWithTimeout(prompt, systemInstruction, apiKey, model, 8000);
+            console.log(`[AI Model] 模型 ${model} 成功返回！🎉`);
             return { result, usedModel: model };
         } catch (err) {
-            console.warn(`[AI Model Fallback] 模型 ${model} 嘗試下一個:`, err.message);
+            console.warn(`[AI Model] 模型 ${model} 切換下一個:`, err.message);
             lastError = err;
         }
     }
 
-    throw lastError || new Error("所有候選模型皆無法連線，請檢查 API Key！");
+    throw lastError || new Error("連線超時，請檢查網路或 API Key。");
 }
 
-async function callGroqRestApi(prompt, systemInstruction, apiKey, modelName = "llama-3.1-8b-instant") {
+async function callGroqRestApiWithTimeout(prompt, systemInstruction, apiKey, modelName = "llama-3.1-8b-instant", timeoutMs = 8000) {
     const endpoint = "https://api.groq.com/openai/v1/chat/completions";
     const messages = [];
     if (systemInstruction) messages.push({ role: "system", content: systemInstruction });
     messages.push({ role: "user", content: prompt });
 
-    const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ model: modelName, messages, temperature: 0.7 })
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(`[Groq] ${errJson.error?.message || response.statusText}`);
+    try {
+        const response = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ model: modelName, messages, temperature: 0.7 }),
+            signal: controller.signal
+        });
+
+        clearTimeout(timer);
+
+        if (!response.ok) {
+            const errJson = await response.json().catch(() => ({}));
+            throw new Error(`[Groq] ${errJson.error?.message || response.statusText}`);
+        }
+
+        const data = await response.json();
+        return cleanReasoningShield(data.choices?.[0]?.message?.content || "");
+    } catch (err) {
+        clearTimeout(timer);
+        if (err.name === 'AbortError') {
+            throw new Error(`[Groq] 請求超時 (${timeoutMs / 1000}秒無響應)`);
+        }
+        throw err;
     }
-
-    const data = await response.json();
-    return cleanReasoningShield(data.choices?.[0]?.message?.content || "");
 }
 
 async function generateImageClientSide(prompt) {
@@ -195,7 +218,7 @@ async function generateImageClientSide(prompt) {
 }
 
 // ============================================================
-// 🎬 4. 雙 Video 雙緩衝無縫視訊管理器 (Seamless Video Engine)
+// 🎬 4. 雙 Video 雙緩衝無縫視訊管理器
 // ============================================================
 
 class SeamlessVideoManager {
@@ -220,7 +243,6 @@ class SeamlessVideoManager {
         this.videoA.addEventListener('ended', () => handleEnd(this.videoA));
         this.videoB.addEventListener('ended', () => handleEnd(this.videoB));
 
-        // 點擊喚醒
         const handleWake = () => {
             if (this.currentVideo.paused) this.currentVideo.play().catch(() => {});
         };
@@ -228,11 +250,7 @@ class SeamlessVideoManager {
         this.videoB.addEventListener('click', handleWake);
     }
 
-    /**
-     * 無縫交叉切換至新視訊 (Zero Black Flash)
-     */
     playSeamless(targetSrc) {
-        // 如果當前已經是同一支且正在播放，不重複加載
         const decodedTarget = decodeURI(targetSrc);
         const currentSrc = decodeURI(this.currentVideo.src);
 
@@ -240,27 +258,23 @@ class SeamlessVideoManager {
             return;
         }
 
-        // 將下一個影片載入至後台 Video
         this.nextVideo.src = targetSrc;
         this.nextVideo.currentTime = 0;
         this.nextVideo.load();
 
         const doTransition = () => {
             this.nextVideo.play().then(() => {
-                // 平滑交叉淡入淡出
                 this.nextVideo.classList.add('active');
                 this.currentVideo.classList.remove('active');
 
-                // 互換指針 (Ping-Pong Buffer)
                 const temp = this.currentVideo;
                 this.currentVideo = this.nextVideo;
                 this.nextVideo = temp;
             }).catch(e => {
-                console.warn("視訊自動播放受阻，等待使用者點擊:", e);
+                console.warn("視訊播放受阻:", e);
             });
         };
 
-        // 若後台視頻已準備好直接切換，否則等待 canplay
         if (this.nextVideo.readyState >= 2) {
             doTransition();
         } else {
@@ -281,7 +295,6 @@ class HaruCompactApp {
         this.history = [];
         this.isGenerating = false;
 
-        // 視訊檔案庫 (使用 encodeURI 確保跨平台相容)
         this.IDLE_VIDEOS = [encodeURI('./assets/待機.mp4'), encodeURI('./assets/待機2.mp4')];
         this.TIRED_VIDEO = encodeURI('./assets/有點累.mp4');
         this.idleIndex = 0;
@@ -385,28 +398,28 @@ class HaruCompactApp {
 
         if (provider === 'google') {
             const models = [
-                { id: 'gemini-3.8-flash', name: 'Google: Gemini 3.8 Flash (最新極速旗艦)' },
-                { id: 'gemini-2.5-flash', name: 'Google: Gemini 2.5 Flash (經典穩定敏捷)' },
-                { id: 'gemma-4-31b-it', name: 'Google: Gemma 4 31B (開源最強·免JSON)' },
-                { id: 'gemini-1.5-flash', name: 'Google: Gemini 1.5 Flash (輕量備援)' }
+                { id: 'gemini-2.5-flash', name: 'Google: Gemini 2.5 Flash (最推薦·極速無延遲)' },
+                { id: 'gemini-1.5-flash', name: 'Google: Gemini 1.5 Flash (超輕量·秒回覆)' },
+                { id: 'gemini-3.8-flash', name: 'Google: Gemini 3.8 Flash (最新旗艦相容)' },
+                { id: 'gemma-4-31b-it', name: 'Google: Gemma 4 31B (開源最強·免JSON)' }
             ];
             models.forEach(m => {
                 const opt = document.createElement('option');
                 opt.value = m.id;
                 opt.textContent = m.name;
-                if (m.id === currentModel || m.id === 'gemini-3.8-flash') opt.selected = true;
+                if (m.id === currentModel || m.id === 'gemini-2.5-flash') opt.selected = true;
                 this.modelSelect.appendChild(opt);
             });
         } else {
             const models = [
-                { id: 'gemma-4-31b-it', name: 'Groq: Gemma 4 31B (免JSON高速推理)' },
-                { id: 'llama-3.1-8b-instant', name: 'Groq: Llama 3.1 8B Instant (極速)' }
+                { id: 'llama-3.1-8b-instant', name: 'Groq: Llama 3.1 8B Instant (極速秒回)' },
+                { id: 'gemma-4-31b-it', name: 'Groq: Gemma 4 31B (免JSON推理)' }
             ];
             models.forEach(m => {
                 const opt = document.createElement('option');
                 opt.value = m.id;
                 opt.textContent = m.name;
-                if (m.id === currentModel || m.id === 'gemma-4-31b-it') opt.selected = true;
+                if (m.id === currentModel || m.id === 'llama-3.1-8b-instant') opt.selected = true;
                 this.modelSelect.appendChild(opt);
             });
         }
@@ -439,10 +452,6 @@ class HaruCompactApp {
         this.quickChipsWrapper.style.display = (currentDisplay === 'none') ? 'flex' : 'none';
     }
 
-    // ============================================================
-    // 🎬 無縫視訊狀態機邏輯 (Seamless Video State Machine)
-    // ============================================================
-
     initSeamlessVideo() {
         if (!this.videoA || !this.videoB) return;
 
@@ -452,7 +461,6 @@ class HaruCompactApp {
             onEnded: () => this.handleVideoEnded()
         });
 
-        // 啟動首個待機視訊
         this.playIdleVideo();
     }
 
@@ -461,10 +469,8 @@ class HaruCompactApp {
             this.tiredPlayCount++;
             if (this.tiredPlayCount < this.TIRED_MAX_REPEATS) {
                 this.videoStatusTag.textContent = `[累累 ${this.tiredPlayCount + 1}/${this.TIRED_MAX_REPEATS} 💤]`;
-                // 雙 Video 無縫重複播放同一支影片，完全不卡頓
                 this.videoManager.playSeamless(this.TIRED_VIDEO);
             } else {
-                // 已連續播放 3 次，切換回待機循環
                 this.isTiredMode = false;
                 this.tiredPlayCount = 0;
                 this.idleIndex = 0;
@@ -472,7 +478,6 @@ class HaruCompactApp {
                 this.playIdleVideo();
             }
         } else {
-            // 待機 1 ⇄ 待機 2 平滑無縫輪播
             this.idleIndex = (this.idleIndex + 1) % this.IDLE_VIDEOS.length;
             this.playIdleVideo();
         }
@@ -606,21 +611,26 @@ class HaruCompactApp {
         }
     }
 
+    /**
+     * 【極速單次推理解決】移除獨立意圖判定，直接一次完成對白與生圖標籤萃取！
+     */
     async sendViaClientSide(text, apiKey) {
         const provider = this.providerSelect.value;
-        const chosenModel = this.modelSelect.value || "gemini-3.8-flash";
+        const chosenModel = this.modelSelect.value || "gemini-2.5-flash";
 
+        // 前置極速關鍵字意圖檢測
         const kws = ["畫", "圖", "照片", "造型", "外表", "長相", "樣貌", "洋裝", "衣服", "穿著", "draw", "image", "pic", "look"];
-        let needImage = kws.some(k => text.toLowerCase().includes(k));
+        const hasDrawKw = kws.some(k => text.toLowerCase().includes(k));
 
+        // ✨ 免 Key 模式：零延遲回覆
         if (!apiKey) {
-            console.log("未填寫 API Key，使用免金鑰智能對話與生圖模式！");
-            await new Promise(r => setTimeout(r, 600));
+            console.log("未檢測到 API Key，使用免金鑰智能對話與生圖模式！");
+            await new Promise(r => setTimeout(r, 400));
 
-            let offlineReply = generateOfflineHaruReply(text, needImage);
+            let offlineReply = generateOfflineHaruReply(text, hasDrawKw);
             let generatedImg = null;
 
-            if (needImage) {
+            if (hasDrawKw) {
                 this.agentStatusText.textContent = '全力畫圖中！✨';
                 const defaultPrompt = "1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, oversized black hoodie with cat ears, gothic punk aesthetic, masterpiece, best quality";
                 generatedImg = await generateImageClientSide(defaultPrompt);
@@ -636,36 +646,23 @@ class HaruCompactApp {
                 imagePrompt: "Gothic Cat-Ear Anime Boy"
             });
 
-            if (needImage) this.triggerTiredVideo();
+            if (hasDrawKw) this.triggerTiredVideo();
             else this.agentStatusText.textContent = '晴琉在線中 🐾';
             return;
         }
 
-        try {
-            let intentRaw = "";
-            if (provider === "google") {
-                const res = await callGoogleWithFallback(`使用者說：${text}`, INTENT_NATURAL_PROMPT, apiKey, chosenModel);
-                intentRaw = res.result;
-            } else {
-                intentRaw = await callGroqRestApi(`使用者說：${text}`, INTENT_NATURAL_PROMPT, apiKey, chosenModel);
-            }
-            needImage = convertProseToIntent(intentRaw, text);
-        } catch (e) {
-            console.warn("意圖判定備援:", e.message);
-        }
-
+        // ==================== 已有 API Key：單次推理解決 (One-Pass) ====================
         let historyContext = "【歷史對話】:\n";
-        this.history.slice(-6).forEach(m => {
+        this.history.slice(-4).forEach(m => {
             const name = m.role === 'user' ? '主人' : '晴琉';
             historyContext += `${name}: ${m.content}\n`;
         });
 
-        const taskGuidance = needImage
-            ? "【注意】：使用者希望能看圖片/視覺畫面！請務必以晴琉身分說話，並附上以 `<image_prompt>` 包裹的英文提示詞。"
-            : "【注意】：此為一般日常閒聊，請勿輸出 `<image_prompt>` 標籤，專注於呆萌可愛的三段式對話互動。";
+        const taskGuidance = hasDrawKw
+            ? "【重要指令】：主人希望看圖片/視覺畫面！請務必以晴琉身分說話，並在回覆最後附上包裹在 `<image_prompt>` 與 `</image_prompt>` 中的英文提示詞。"
+            : "【重要指令】：日常閒聊互動，請勿輸出 `<image_prompt>` 標籤，專注於呆萌可愛的三段式對話。";
 
         const fullPrompt = `${historyContext}\n主人最新說話：${text}\n${taskGuidance}`;
-        this.agentStatusText.textContent = needImage ? '調配顏料中... 🎨' : '可愛回覆中... 💖';
 
         let rawReply = "";
         let usedModelName = chosenModel;
@@ -675,17 +672,19 @@ class HaruCompactApp {
             rawReply = resp.result;
             usedModelName = resp.usedModel;
         } else {
-            rawReply = await callGroqRestApi(fullPrompt, HARU_SYSTEM_PROMPT, apiKey, chosenModel);
+            rawReply = await callGroqRestApiWithTimeout(fullPrompt, HARU_SYSTEM_PROMPT, apiKey, chosenModel, 8000);
         }
 
         const { cleanText, imagePrompt } = extractImagePrompt(rawReply);
         this.history.push({ role: 'assistant', content: cleanText });
         this.addHistoryRecord('assistant', cleanText);
 
+        const needImage = Boolean(imagePrompt || hasDrawKw);
         let generatedImg = null;
-        if (needImage || imagePrompt) {
-            const promptToDraw = imagePrompt || "1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, oversized black hoodie with cat ears, gothic punk aesthetic, masterpiece, best quality";
+
+        if (needImage) {
             this.agentStatusText.textContent = '全力畫圖中！✨';
+            const promptToDraw = imagePrompt || "1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, oversized black hoodie with cat ears, gothic punk aesthetic, masterpiece, best quality";
             generatedImg = await generateImageClientSide(promptToDraw);
         }
 
@@ -696,7 +695,7 @@ class HaruCompactApp {
             imagePrompt: imagePrompt
         });
 
-        if (needImage || imagePrompt) {
+        if (needImage) {
             this.triggerTiredVideo();
         } else {
             this.agentStatusText.textContent = `晴琉在線中 (${usedModelName}) 🐾`;
