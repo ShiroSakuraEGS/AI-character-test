@@ -1,12 +1,11 @@
 /**
- * 🎀 晴琉 (Haru) - 沉浸式可愛小男生 AI Agent 雙模核心引擎 (app.js)
- * 特色：
- * 1. 沉浸式全螢幕背景角色影片 (滿版置中)
- * 2. 下 1/3 超緊湊半透明極簡對話框 (支援一鍵折疊收起 ▼ / ▲)
- * 3. 手機端微型晶透按鈕 (獨立絕對定位，100% 點擊響應)
- * 4. 支援 GitHub Pages 純前端直連 (Google Gemini REST API / Groq API / Pollinations 動漫生圖)
- * 5. 視訊播放狀態機：待機 1 ⇄ 待機 2 循環播放，生圖後連續播放「有點累.mp4」3 次
- * 6. 防彈級 JSON 解析與 Reasoning Shield (過濾思考標籤)
+ * 🎀 晴琉 (Haru) - 沉浸式可愛小男生 AI Agent 雙模核心引擎 (app.js) - 防彈強化版
+ * 強化重點：
+ * 1. 多模型自動輪替調用鏈 (Fallback Chain): gemini-2.5-flash ➔ gemini-2.0-flash ➔ gemini-1.5-flash ➔ gemini-1.5-pro
+ * 2. 智慧雙模切換：自動偵測本地後端 /api/chat，若無後端或處於 GitHub Pages 則平滑切換純前端直連
+ * 3. 清楚直觀的 API Key 引導 (未填 Key 時自動彈出面板並溫馨引導，不卡死或拋黑屏)
+ * 4. 防彈 JSON 解析與 Reasoning Shield (<think> 標籤過濾)
+ * 5. 全螢幕背景影片狀態機 (待機循環 + 畫完累累 x3)
  */
 
 // ============================================================
@@ -81,18 +80,9 @@ function autoRepairTruncatedJson(rawJson) {
 
     for (let i = 0; i < rawJson.length; i++) {
         const char = rawJson[i];
-        if (escape) {
-            escape = false;
-            continue;
-        }
-        if (char === '\\') {
-            escape = true;
-            continue;
-        }
-        if (char === '"') {
-            inString = !inString;
-            continue;
-        }
+        if (escape) { escape = false; continue; }
+        if (char === '\\') { escape = true; continue; }
+        if (char === '"') { inString = !inString; continue; }
         if (!inString) {
             if (char === '{' || char === '[') stack.push(char);
             else if (char === '}') {
@@ -104,13 +94,11 @@ function autoRepairTruncatedJson(rawJson) {
     }
 
     if (inString) rawJson += '"';
-
     while (stack.length > 0) {
         const open = stack.pop();
         if (open === '{') rawJson += '}';
         else if (open === '[') rawJson += ']';
     }
-
     return rawJson;
 }
 
@@ -151,25 +139,39 @@ function extractImagePrompt(reply) {
 }
 
 // ============================================================
-// 🌐 3. 純前端直接調用管線 (Gemini / Groq / Pollinations)
+// 🔄 3. Google Gemini 多模型自動備援鏈 (Fallback Chain)
 // ============================================================
 
-async function callGeminiRestApi(prompt, systemInstruction, apiKey, modelName = "gemini-2.5-flash", jsonMode = false) {
-    if (!apiKey) {
-        throw new Error("請點擊右上角「⚙️ 設定」輸入您的 Google Gemini API Key 喔！🐾");
-    }
+const GEMINI_FALLBACK_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro"
+];
 
+async function callSingleGeminiModel(prompt, systemInstruction, apiKey, modelName, jsonMode = false) {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    
     const bodyPayload = {
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        contents: [
+            {
+                role: "user",
+                parts: [{ text: prompt }]
+            }
+        ],
         generationConfig: {
-            temperature: 0.7,
-            responseMimeType: jsonMode ? "application/json" : "text/plain"
+            temperature: 0.7
         }
     };
 
+    if (jsonMode) {
+        bodyPayload.generationConfig.responseMimeType = "application/json";
+    }
+
     if (systemInstruction) {
-        bodyPayload.systemInstruction = { parts: [{ text: systemInstruction }] };
+        bodyPayload.systemInstruction = {
+            parts: [{ text: systemInstruction }]
+        };
     }
 
     const response = await fetch(endpoint, {
@@ -180,26 +182,56 @@ async function callGeminiRestApi(prompt, systemInstruction, apiKey, modelName = 
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errMsg = errorData.error?.message || response.statusText;
-        throw new Error(`Google Gemini 錯誤 (${response.status}): ${errMsg}`);
+        const errMsg = errorData.error?.message || `HTTP ${response.status}`;
+        throw new Error(`[${modelName}] ${errMsg}`);
     }
 
     const data = await response.json();
-    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!candidateText) {
+        throw new Error(`[${modelName}] 模型未返回文字內容`);
+    }
     return cleanReasoningShield(candidateText);
 }
 
-async function callGroqRestApi(prompt, systemInstruction, apiKey, modelName = "llama-3.1-8b-instant", jsonMode = false) {
-    if (!apiKey) {
-        throw new Error("請點擊右上角「⚙️ 設定」輸入您的 Groq API Key 喔！🐾");
+/**
+ * 具有自動輪替備援機制的 Google Gemini 呼叫
+ */
+async function callGeminiWithFallback(prompt, systemInstruction, apiKey, preferredModel = "gemini-2.5-flash", jsonMode = false) {
+    // 將使用者偏好的模型排在第一位，後面接備援鏈
+    const modelsToTry = [preferredModel, ...GEMINI_FALLBACK_MODELS.filter(m => m !== preferredModel)];
+    let lastError = null;
+
+    for (const model of modelsToTry) {
+        try {
+            console.log(`[Gemini API] 正在嘗試模型: ${model}...`);
+            const result = await callSingleGeminiModel(prompt, systemInstruction, apiKey, model, jsonMode);
+            console.log(`[Gemini API] 模型 ${model} 呼叫成功！🎉`);
+            return result;
+        } catch (err) {
+            console.warn(`[Gemini API] 模型 ${model} 呼叫失敗:`, err.message);
+            lastError = err;
+            // 繼續輪替下一個模型
+        }
     }
 
+    throw lastError || new Error("所有 Gemini 備援模型皆呼叫失敗，請檢查 API Key 是否有效！");
+}
+
+/**
+ * 呼叫 Groq REST API
+ */
+async function callGroqRestApi(prompt, systemInstruction, apiKey, modelName = "llama-3.1-8b-instant", jsonMode = false) {
     const endpoint = "https://api.groq.com/openai/v1/chat/completions";
     const messages = [];
     if (systemInstruction) messages.push({ role: "system", content: systemInstruction });
     messages.push({ role: "user", content: prompt });
 
-    const payload = { model: modelName, messages, temperature: 0.7 };
+    const payload = {
+        model: modelName,
+        messages,
+        temperature: 0.7
+    };
     if (jsonMode) payload.response_format = { type: "json_object" };
 
     const response = await fetch(endpoint, {
@@ -213,17 +245,20 @@ async function callGroqRestApi(prompt, systemInstruction, apiKey, modelName = "l
 
     if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
-        const errMsg = errJson.error?.message || response.statusText;
-        throw new Error(`Groq 錯誤 (${response.status}): ${errMsg}`);
+        const errMsg = errJson.error?.message || `HTTP ${response.status}`;
+        throw new Error(`[Groq] ${errMsg}`);
     }
 
     const data = await response.json();
     return cleanReasoningShield(data.choices?.[0]?.message?.content || "");
 }
 
+/**
+ * 統一客戶端 LLM 調用介面
+ */
 async function unifiedCallLlm({ prompt, systemInstruction, provider, apiKey, modelName, jsonMode = false }) {
     if (provider === "google") {
-        return await callGeminiRestApi(prompt, systemInstruction, apiKey, modelName || "gemini-2.5-flash", jsonMode);
+        return await callGeminiWithFallback(prompt, systemInstruction, apiKey, modelName || "gemini-2.5-flash", jsonMode);
     } else if (provider === "groq") {
         return await callGroqRestApi(prompt, systemInstruction, apiKey, modelName || "llama-3.1-8b-instant", jsonMode);
     }
@@ -235,12 +270,12 @@ async function generateImageClientSide(prompt) {
     const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=512&height=512&nologo=true&model=flux`;
     return {
         imageUrl: imageUrl,
-        toolName: "Pollinations FLUX (動漫生圖)"
+        toolName: "Pollinations FLUX (免金鑰動漫生圖)"
     };
 }
 
 // ============================================================
-// 📱 4. 超緊湊應用控制器 (Ultra-Compact App Controller)
+// 📱 4. 超緊湊應用控制器 (HaruApp)
 // ============================================================
 
 class HaruCompactApp {
@@ -248,7 +283,7 @@ class HaruCompactApp {
         this.history = [];
         this.isGenerating = false;
 
-        // 視訊播放狀態機 (相對路徑)
+        // 視訊播放狀態機
         this.IDLE_VIDEOS = ['./assets/待機.mp4', './assets/待機2.mp4'];
         this.TIRED_VIDEO = './assets/有點累.mp4';
         this.idleIndex = 0;
@@ -264,13 +299,11 @@ class HaruCompactApp {
     }
 
     initDomElements() {
-        // 影片與頂部狀態
         this.videoEl = document.getElementById('haruVideo');
         this.statusDot = document.getElementById('statusDot');
         this.agentStatusText = document.getElementById('agentStatusText');
         this.videoStatusTag = document.getElementById('videoStatusTag');
 
-        // 下 1/3 對話框組件
         this.dialogueCard = document.getElementById('dialogueCard');
         this.btnToggleMinimize = document.getElementById('btnToggleMinimize');
         this.userLastSpeech = document.getElementById('userLastSpeech');
@@ -279,12 +312,10 @@ class HaruCompactApp {
         this.userInput = document.getElementById('userInput');
         this.btnSend = document.getElementById('btnSend');
 
-        // 話題快捷橫列
         this.btnToggleChips = document.getElementById('btnToggleChips');
         this.quickChipsWrapper = document.getElementById('quickChipsWrapper');
         this.chipPills = document.querySelectorAll('.chip-pill');
 
-        // 抽屜面板控制
         this.drawerOverlay = document.getElementById('drawerOverlay');
         this.btnOpenDrawer = document.getElementById('btnOpenDrawer');
         this.btnCloseSettings = document.getElementById('btnCloseSettings');
@@ -295,7 +326,6 @@ class HaruCompactApp {
         this.historyDrawer = document.getElementById('historyDrawer');
         this.historyListContainer = document.getElementById('historyListContainer');
 
-        // 表單元素
         this.backendModeSelect = document.getElementById('backendModeSelect');
         this.providerSelect = document.getElementById('providerSelect');
         this.modelSelect = document.getElementById('modelSelect');
@@ -305,7 +335,6 @@ class HaruCompactApp {
         this.btnClearChat = document.getElementById('btnClearChat');
         this.btnExportChat = document.getElementById('btnExportChat');
 
-        // 燈箱 Modal
         this.lightboxModal = document.getElementById('lightboxModal');
         this.lightboxImg = document.getElementById('lightboxImg');
     }
@@ -329,7 +358,8 @@ class HaruCompactApp {
         if (this.modelSelect) localStorage.setItem('haru_model', this.modelSelect.value);
         if (this.apiKeyInput) localStorage.setItem('haru_api_key', this.apiKeyInput.value.trim());
         if (this.backendModeSelect) localStorage.setItem('haru_backend_mode', this.backendModeSelect.value);
-        this.showToast("💖 設定與 API Key 已儲存！");
+        this.showToast("💖 設定與 API Key 已安全儲存！");
+        this.closeAllDrawers();
     }
 
     clearSettings() {
@@ -342,8 +372,11 @@ class HaruCompactApp {
         const isFileOrGithub = window.location.hostname.includes('github.io') || window.location.protocol === 'file:';
         if (isFileOrGithub && this.backendModeSelect) {
             this.backendModeSelect.value = "client";
-            this.backendModeSelect.options[0].disabled = true;
-            this.backendModeSelect.options[0].text += " (GitHub Pages 純前端)";
+            this.backendModeSelect.options[1].disabled = true;
+            this.backendModeSelect.options[1].text += " (僅本機伺服器可用)";
+        } else if (!localStorage.getItem('haru_backend_mode')) {
+            // 本機環境下若未指定，自動優先嘗試 local
+            if (this.backendModeSelect) this.backendModeSelect.value = "local";
         }
     }
 
@@ -355,8 +388,9 @@ class HaruCompactApp {
         if (provider === 'google') {
             const models = [
                 { id: 'gemini-2.5-flash', name: 'Google: gemini-2.5-flash (推薦最穩定)' },
-                { id: 'gemini-3.8', name: 'Google: gemini-3.8 (最新旗艦)' },
-                { id: 'gemini-1.5-flash', name: 'Google: gemini-1.5-flash (輕量高速)' }
+                { id: 'gemini-2.0-flash', name: 'Google: gemini-2.0-flash (次世代高速)' },
+                { id: 'gemini-1.5-flash', name: 'Google: gemini-1.5-flash (輕量經典)' },
+                { id: 'gemini-3.8', name: 'Google: gemini-3.8 (最新旗艦相容)' }
             ];
             models.forEach(m => {
                 const opt = document.createElement('option');
@@ -380,15 +414,13 @@ class HaruCompactApp {
         }
     }
 
-    // ============================================================
-    // 🚪 公開抽屜控制方法 (同時支援 HTML inline onclick 與 JS 監聽)
-    // ============================================================
-
     openSettingsDrawer() {
         if (!this.settingsDrawer || !this.drawerOverlay) return;
         this.historyDrawer?.classList.remove('open');
         this.settingsDrawer.classList.add('open');
         this.drawerOverlay.classList.add('active');
+        // 自動聚焦在 API Key 輸入框
+        setTimeout(() => this.apiKeyInput?.focus(), 300);
     }
 
     openHistoryDrawer() {
@@ -409,10 +441,6 @@ class HaruCompactApp {
         const currentDisplay = window.getComputedStyle(this.quickChipsWrapper).display;
         this.quickChipsWrapper.style.display = (currentDisplay === 'none') ? 'flex' : 'none';
     }
-
-    // ============================================================
-    // 📹 5. 視訊播放狀態機
-    // ============================================================
 
     initVideoStateMachine() {
         if (!this.videoEl) return;
@@ -467,10 +495,6 @@ class HaruCompactApp {
         this.statusDot.className = 'status-dot tired';
         this.agentStatusText.textContent = `晴琉充電中 💤`;
     }
-
-    // ============================================================
-    // 💬 6. 超緊湊對話更新與收合模式
-    // ============================================================
 
     toggleMinimizeDialogue() {
         if (!this.dialogueCard) return;
@@ -553,14 +577,35 @@ class HaruCompactApp {
 
         try {
             if (backendMode === 'local') {
-                await this.sendViaLocalServer(text);
+                try {
+                    await this.sendViaLocalServer(text);
+                } catch (localErr) {
+                    console.warn("本地後端無法連線，自動平滑切換至純前端直連:", localErr.message);
+                    await this.sendViaClientSide(text);
+                }
             } else {
                 await this.sendViaClientSide(text);
             }
         } catch (err) {
-            console.error("對話失敗:", err);
-            this.latestBotReply.innerHTML = `嗚……晴琉腦袋打結了……(つд⊂)💦<br><small style="color:var(--accent-pink);">原因：${err.message}</small>`;
-            this.agentStatusText.textContent = '異常 ⚠️';
+            console.error("對話連線異常:", err);
+            
+            // 溫馨引導：若為 API Key 未填寫
+            if (err.message.includes("API Key")) {
+                this.latestBotReply.innerHTML = `
+                    ……主人？晴琉的心靈感應水晶（API Key）好像還沒填上喔！🥺🖤<br>
+                    <span class="action-quote">（拉了拉寬寬的長袖子，指著右邊開啟的設定面板）</span><br>
+                    請在右側貼上您的 Google Gemini API Key（或 Groq Key），晴琉就能馬上陪您聊天畫圖了！(⸝⸝•‧̫•⸝⸝)🐾
+                `;
+                this.agentStatusText.textContent = '等待設定 Key 🔑';
+            } else {
+                this.latestBotReply.innerHTML = `
+                    嗚……晴琉的腦袋好像打結了……(つд⊂)💦<br>
+                    <span class="action-quote">（緊張地抱緊了黑兔子布偶）</span><br>
+                    <small style="color:var(--accent-pink);">錯誤原因：${err.message}</small><br>
+                    <small style="color:var(--text-dim);">提示：請確認右上角「⚙️ 設定」中的 API Key 是否正確。</small>
+                `;
+                this.agentStatusText.textContent = '連線異常 ⚠️';
+            }
         } finally {
             this.isGenerating = false;
             this.btnSend.disabled = false;
@@ -575,10 +620,10 @@ class HaruCompactApp {
 
         if (!apiKey) {
             this.openSettingsDrawer();
-            throw new Error("請先在開啟的「⚙️ 設定面板」貼上您的 API Key 喔！🐾");
+            throw new Error("未填寫 API Key");
         }
 
-        // 1. 意圖判定
+        // 1. 意圖判定 (失敗時自動關鍵字備援，絕不拋錯)
         let needImage = false;
         try {
             const intentRaw = await unifiedCallLlm({
@@ -596,7 +641,7 @@ class HaruCompactApp {
             needImage = kws.some(k => text.toLowerCase().includes(k));
         }
 
-        // 2. 構建上下文
+        // 2. 構建上下文與對話生成
         let historyContext = "【歷史對話】:\n";
         this.history.slice(-6).forEach(m => {
             const name = m.role === 'user' ? '主人' : '晴琉';
@@ -729,7 +774,6 @@ class HaruCompactApp {
     }
 
     bindEvents() {
-        // 快捷標籤點擊發送
         this.chipPills?.forEach(pill => {
             pill.addEventListener('click', () => {
                 const prompt = pill.getAttribute('data-prompt');
@@ -737,17 +781,14 @@ class HaruCompactApp {
             });
         });
 
-        // 發送訊息按鍵
         this.userInput?.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') this.handleSend();
         });
 
-        // 表單設定
         this.providerSelect?.addEventListener('change', () => this.updateModelOptions());
     }
 }
 
-// 實例化並暴露至全域 window.haruApp
 document.addEventListener('DOMContentLoaded', () => {
     window.haruApp = new HaruCompactApp();
 });

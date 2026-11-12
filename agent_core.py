@@ -172,25 +172,28 @@ def call_llm(
             system_instruction=system_instruction or None,
             response_mime_type="application/json" if json_mode else "text/plain"
         )
-        # 預設首選快速回應模型（支援 Gemini 3.8 / 2.5 Flash / nano banana 降級備援）
-        chosen_model = model_name or "gemini-2.5-flash"
-        try:
-            response = client.models.generate_content(
-                model=chosen_model,
-                contents=prompt,
-                config=config
-            )
-            return clean_reasoning_shield(response.text or "")
-        except Exception as e:
-            # 若指定的自訂模型不存在，自動平滑降級至 gemini-2.5-flash
-            if chosen_model != "gemini-2.5-flash":
+        # 依序嘗試多模型備援鏈 (SOP Fallback Chain)
+        candidate_models = [model_name or "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+        # 去重且保留順序
+        models_to_try = []
+        for m in candidate_models:
+            if m and m not in models_to_try:
+                models_to_try.append(m)
+
+        last_exc = None
+        for m in models_to_try:
+            try:
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model=m,
                     contents=prompt,
                     config=config
                 )
                 return clean_reasoning_shield(response.text or "")
-            raise e
+            except Exception as e:
+                print(f"[Gemini Fallback] 模型 {m} 嘗試失敗: {e}，切換下一個備援模型...")
+                last_exc = e
+
+        raise last_exc or ValueError("所有 Gemini 備援模型皆呼叫失敗，請檢查 API Key 是否有效！")
 
     elif provider == "groq":
         key = api_key or os.getenv("GROQ_API_KEY")
