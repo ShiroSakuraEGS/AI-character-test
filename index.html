@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>🎀 晴琉 (Haru) - 可愛小男生 AI 聊天室 (GitHub & RWD 優化版)</title>
+    <!-- 預載 Favicon 與字體 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎀</text></svg>">
+    
+    <style>
+        :root {
+            --bg-color: #0b0910;
+            --card-bg: #14101c;
+            --card-surface: #1b1626;
+            --card-border: #322543;
+            --card-border-hover: #ff4d8d;
+            --accent-pink: #ff4d8d;
+            --accent-pink-glow: rgba(255, 77, 141, 0.35);
+            --accent-purple: #9d4edd;
+            --accent-purple-glow: rgba(157, 78, 221, 0.3);
+            --text-main: #f8f6fc;
+            --text-dim: #9e91ad;
+            --user-bubble: #2d1e3d;
+            --user-bubble-border: #5a3a78;
+            --bot-bubble: #1c1628;
+            --indicator-green: #00ff88;
+            --indicator-tired: #ffaa00;
+            --github-gray: #30363d;
+            --github-text: #c9d1d9;
+            --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-area-top: env(safe-area-inset-top, 0px);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            display: flex;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(157, 78, 221, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(255, 77, 141, 0.08) 0%, transparent 40%);
+        }
+
+        /* ==================== 抽屜遮罩 (手機端) ==================== */
+        .drawer-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.78);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            z-index: 1000;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .drawer-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* ==================== 側邊設定面板 (RWD 抽屜) ==================== */
+        .sidebar {
+            width: 350px;
+            background: var(--card-bg);
+            border-right: 1px solid var(--card-border);
+            display: flex;
+            flex-direction: column;
+            padding: 22px 18px;
+            gap: 16px;
+            overflow-y: auto;
+            z-index: 1001;
+            transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px dashed var(--card-border);
+            padding-bottom: 12px;
+        }
+
+        .sidebar-header h2 {
+            font-size: 1.15rem;
+            color: var(--accent-pink);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+        }
+
+        .btn-close-drawer {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 1.6rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            line-height: 1;
+        }
+
+        .btn-close-drawer:hover {
+            color: #fff;
+            background: var(--card-surface);
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 0.82rem;
+            color: var(--text-dim);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        select, input[type="password"], input[type="text"] {
+            background: #0f0c16;
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            padding: 10px 14px;
+            border-radius: 9px;
+            outline: none;
+            font-size: 0.88rem;
+            transition: all 0.25s ease;
+            width: 100%;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--accent-pink);
+            box-shadow: 0 0 10px var(--accent-pink-glow);
+        }
+
+        .button-group-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-action-small {
+            flex: 1;
+            background: var(--card-surface);
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .btn-action-small:hover {
+            border-color: var(--accent-pink);
+            background: rgba(255, 77, 141, 0.1);
+        }
+
+        .status-box {
+            background: #110d19;
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 14px;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            position: relative;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            background: rgba(255, 77, 141, 0.15);
+            color: var(--accent-pink);
+            border: 1px solid var(--accent-pink);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        /* ==================== 主要應用主體 (RWD 雙欄 / 手機單欄) ==================== */
+        .main-app {
+            flex: 1;
+            display: flex;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* 桌機左側：角色視訊展示區 */
+        .video-container {
+            width: 380px;
+            background: #08060c;
+            border-right: 1px solid var(--card-border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 20px;
+            position: relative;
+            flex-shrink: 0;
+            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            user-select: none;
+        }
+
+        .video-wrapper {
+            width: 100%;
+            max-width: 320px;
+            aspect-ratio: 9 / 16;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 2px solid var(--card-border);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8), 0 0 30px var(--accent-pink-glow);
+            background: #000;
+            position: relative;
+            transition: transform 0.3s ease;
+        }
+
+        .video-wrapper:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-pink);
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            cursor: pointer;
+        }
+
+        .video-tag {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(14, 11, 20, 0.88);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            color: var(--accent-pink);
+            border: 1px solid rgba(255, 77, 141, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            z-index: 2;
+            font-weight: 600;
+        }
+
+        .indicator-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--indicator-green);
+            box-shadow: 0 0 10px var(--indicator-green);
+            transition: all 0.3s ease;
+        }
+
+        .indicator-dot.tired {
+            background: var(--indicator-tired);
+            box-shadow: 0 0 10px var(--indicator-tired);
+        }
+
+        .char-info {
+            margin-top: 18px;
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            line-height: 1.6;
+        }
+
+        .char-info b {
+            color: var(--text-main);
+            font-size: 1.1rem;
+            letter-spacing: 0.5px;
+        }
+
+        .char-badges {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .badge-pill {
+            font-size: 0.72rem;
+            padding: 3px 9px;
+            border-radius: 20px;
+            background: rgba(157, 78, 221, 0.15);
+            color: #d8b4fe;
+            border: 1px solid rgba(157, 78, 221, 0.4);
+        }
+
+        .btn-toggle-video-collapse {
+            display: none;
+            margin-top: 8px;
+            background: var(--card-surface);
+            border: 1px solid var(--card-border);
+            color: var(--text-dim);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        /* 浮動視訊迷你膠囊 (手機視訊折疊時顯示) */
+        .floating-video-badge {
+            position: fixed;
+            top: 60px;
+            right: 14px;
+            z-index: 900;
+            background: rgba(20, 16, 28, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--accent-pink);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6), 0 0 10px var(--accent-pink-glow);
+            border-radius: 20px;
+            padding: 5px 12px;
+            font-size: 0.75rem;
+            color: #fff;
+            display: none;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 8px var(--accent-pink-glow); }
+            50% { box-shadow: 0 0 16px var(--accent-pink-glow); }
+        }
+
+        /* ==================== 聊天室主面板 ==================== */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #0f0d15;
+            height: 100%;
+            position: relative;
+            min-width: 0;
+        }
+
+        /* 頂部 GitHub 風格導航列 */
+        .top-navbar {
+            padding: 12px 20px;
+            background: rgba(20, 16, 28, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--card-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .title-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .brand-avatar {
+            font-size: 1.5rem;
+            line-height: 1;
+            filter: drop-shadow(0 0 6px var(--accent-pink));
+        }
+
+        .title-area h1 {
+            font-size: 1.15rem;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .title-area .version-badge {
+            font-size: 0.68rem;
+            padding: 2px 7px;
+            border-radius: 10px;
+            background: rgba(255, 77, 141, 0.2);
+            color: var(--accent-pink);
+            border: 1px solid var(--accent-pink);
+            font-weight: 600;
+        }
+
+        .title-area p {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        /* GitHub 按鈕樣式 */
+        .btn-github {
+            background: #21262d;
+            border: 1px solid var(--github-gray);
+            color: var(--github-text);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .btn-github:hover {
+            background: #30363d;
+            border-color: #8b949e;
+            color: #fff;
+            transform: translateY(-1px);
+        }
+
+        .btn-github svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        .btn-drawer-toggle {
+            background: var(--card-surface);
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-drawer-toggle:hover {
+            border-color: var(--accent-pink);
+            background: rgba(255, 77, 141, 0.12);
+        }
+
+        /* 快捷提問膠囊列 (Quick Prompt Chips) */
+        .quick-chips-bar {
+            padding: 8px 16px;
+            background: #120e1a;
+            border-bottom: 1px solid rgba(50, 37, 67, 0.6);
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            white-space: nowrap;
+            flex-shrink: 0;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .quick-chips-bar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .chip-btn {
+            background: #1c1628;
+            border: 1px solid var(--card-border);
+            color: #d0c8db;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s ease;
+            user-select: none;
+            flex-shrink: 0;
+        }
+
+        .chip-btn:hover {
+            border-color: var(--accent-pink);
+            color: #fff;
+            background: rgba(255, 77, 141, 0.15);
+            transform: scale(1.02);
+        }
+
+        /* 對話訊息捲動區 */
+        .messages-scroll {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .messages-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages-scroll::-webkit-scrollbar-thumb {
+            background: var(--card-border);
+            border-radius: 10px;
+        }
+
+        .msg-row {
+            display: flex;
+            gap: 12px;
+            max-width: 82%;
+            animation: fadeInMsg 0.3s ease;
+        }
+
+        @keyframes fadeInMsg {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .msg-row.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .msg-row.bot {
+            align-self: flex-start;
+        }
+
+        .avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
+            flex-shrink: 0;
+            border: 2px solid var(--card-border);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        .msg-row.user .avatar {
+            background: #342845;
+            border-color: #5a3a78;
+        }
+
+        .bubble {
+            padding: 12px 16px;
+            border-radius: 16px;
+            line-height: 1.6;
+            font-size: 0.94rem;
+            word-break: break-word;
+            border: 1px solid var(--card-border);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        .msg-row.user .bubble {
+            background: var(--user-bubble);
+            border-color: var(--user-bubble-border);
+            color: #ffffff;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg-row.bot .bubble {
+            background: var(--bot-bubble);
+            border-bottom-left-radius: 4px;
+        }
+
+        .action-quote {
+            color: #e4c5f5;
+            font-style: italic;
+            display: inline-block;
+            margin: 2px 0;
+            background: rgba(157, 78, 221, 0.15);
+            padding: 1px 6px;
+            border-radius: 6px;
+            border-left: 2px solid var(--accent-pink);
+        }
+
+        /* 圖片卡片 */
+        .image-card {
+            margin-top: 12px;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid var(--accent-pink);
+            background: #09070d;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6), 0 0 20px var(--accent-pink-glow);
+            max-width: 480px;
+        }
+
+        .image-card img {
+            width: 100%;
+            height: auto;
+            max-height: 380px;
+            object-fit: cover;
+            display: block;
+            transition: transform 0.3s;
+        }
+
+        .image-card img:hover {
+            transform: scale(1.01);
+        }
+
+        .image-info {
+            padding: 9px 13px;
+            font-size: 0.78rem;
+            color: var(--text-dim);
+            background: #14101d;
+            border-top: 1px solid var(--card-border);
+        }
+
+        /* 底部輸入列 */
+        .input-bar-container {
+            background: var(--card-bg);
+            border-top: 1px solid var(--card-border);
+            padding: 12px 20px calc(12px + var(--safe-area-bottom));
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .input-bar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .input-bar input {
+            flex: 1;
+            padding: 12px 16px;
+            font-size: 0.95rem;
+            background: #0c0913;
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .input-bar input:focus {
+            border-color: var(--accent-pink);
+            box-shadow: 0 0 12px var(--accent-pink-glow);
+        }
+
+        .btn-send {
+            background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+            color: white;
+            border: none;
+            padding: 12px 22px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 0.92rem;
+            cursor: pointer;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 15px var(--accent-pink-glow);
+        }
+
+        .btn-send:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px var(--accent-pink-glow);
+        }
+
+        .btn-send:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .input-hint-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.73rem;
+            color: var(--text-dim);
+            padding: 0 4px;
+        }
+
+        /* 吐司通知 (Toast) */
+        .toast-notification {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(25, 20, 35, 0.96);
+            backdrop-filter: blur(12px);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 30px;
+            border: 1px solid var(--accent-pink);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6), 0 0 15px var(--accent-pink-glow);
+            font-size: 0.85rem;
+            z-index: 2000;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .toast-notification.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* ==================== 📱 RWD 手機版型全面優化 (< 768px) ==================== */
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+
+            /* 手機抽屜側邊欄 */
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                width: 85%;
+                max-width: 320px;
+                transform: translateX(-100%);
+                box-shadow: 8px 0 30px rgba(0, 0, 0, 0.9);
+                padding-top: calc(20px + var(--safe-area-top));
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            .btn-close-drawer {
+                display: block;
+            }
+
+            /* 手機版：主應用改為垂直排列 */
+            .main-app {
+                flex-direction: column;
+            }
+
+            /* 手機頂部視訊展示：緊湊精緻小視窗 (高度約 120px) */
+            .video-container {
+                width: 100%;
+                height: 125px;
+                padding: 8px 14px;
+                border-right: none;
+                border-bottom: 1px solid var(--card-border);
+                background: #0b0813;
+                flex-direction: row;
+                gap: 14px;
+                justify-content: flex-start;
+                align-items: center;
+                flex-shrink: 0;
+            }
+
+            .video-container.collapsed {
+                display: none;
+            }
+
+            .video-wrapper {
+                height: 100%;
+                width: auto;
+                aspect-ratio: 9 / 16;
+                max-width: 75px;
+                border-radius: 12px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+            }
+
+            .video-tag {
+                top: 4px;
+                left: 4px;
+                padding: 2px 6px;
+                font-size: 0.65rem;
+                border-radius: 10px;
+            }
+
+            .char-info {
+                margin-top: 0;
+                text-align: left;
+                font-size: 0.78rem;
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 2px;
+            }
+
+            .char-info b {
+                font-size: 0.95rem;
+            }
+
+            .char-badges {
+                justify-content: flex-start;
+                margin-top: 2px;
+            }
+
+            .btn-toggle-video-collapse {
+                display: inline-block;
+                align-self: flex-start;
+            }
+
+            /* 手機端訊息寬度放大 */
+            .msg-row {
+                max-width: 93%;
+            }
+
+            .top-navbar {
+                padding: 10px 14px;
+                padding-top: calc(10px + var(--safe-area-top));
+            }
+
+            .title-area h1 {
+                font-size: 1rem;
+            }
+
+            .btn-github span {
+                display: none; /* 手機端只顯示 GitHub 圖示，節省版面 */
+            }
+
+            .btn-github {
+                padding: 6px 8px;
+            }
+
+            .messages-scroll {
+                padding: 14px;
+                gap: 14px;
+            }
+
+            .input-bar-container {
+                padding: 10px 14px calc(10px + var(--safe-area-bottom));
+            }
+
+            .input-bar input {
+                padding: 10px 14px;
+                font-size: 0.9rem;
+            }
+
+            .btn-send {
+                padding: 10px 16px;
+                font-size: 0.88rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 遮罩 (手機端抽屜開啟時顯示) -->
+    <div class="drawer-overlay" id="drawerOverlay"></div>
+
+    <!-- 側邊設定面板 (支援電腦側邊/手機滑出抽屜) -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h2>🎀 晴琉設定面板</h2>
+            <button class="btn-close-drawer" id="btnCloseDrawer">&times;</button>
+        </div>
+        
+        <!-- 運行模式 -->
+        <div class="form-group">
+            <label for="backendModeSelect">🌐 運行架構模式：</label>
+            <select id="backendModeSelect">
+                <option value="client" selected>GitHub Pages 純前端直連 (推薦零後端)</option>
+                <option value="local">本機 Python 伺服器 (/api/chat)</option>
+            </select>
+        </div>
+
+        <!-- API 提供商 -->
+        <div class="form-group">
+            <label for="providerSelect">⚡ AI 推理服務商：</label>
+            <select id="providerSelect">
+                <option value="google" selected>Google AI Studio (Gemini)</option>
+                <option value="groq">Groq API (極速 Llama)</option>
+            </select>
+        </div>
+
+        <!-- 模型選擇 -->
+        <div class="form-group">
+            <label for="modelSelect">🧠 模型選擇：</label>
+            <select id="modelSelect">
+                <option value="gemini-2.5-flash" selected>Google: gemini-2.5-flash (推薦最穩定敏捷)</option>
+                <option value="gemini-3.8">Google: gemini-3.8 (最新旗艦相容)</option>
+                <option value="gemini-1.5-flash">Google: gemini-1.5-flash (輕量高速)</option>
+            </select>
+        </div>
+
+        <!-- API Key 輸入框 -->
+        <div class="form-group">
+            <label for="apiKeyInput">🔑 API Key (僅保存在本機瀏覽器)：</label>
+            <input type="password" id="apiKeyInput" placeholder="貼上 API Key (例: AIzaSy...)" autocomplete="off" />
+        </div>
+
+        <div class="button-group-row">
+            <button class="btn-action-small" id="btnSaveKeys">💾 記住設定</button>
+            <button class="btn-action-small" id="btnClearKeys">🧹 清除 Key</button>
+        </div>
+
+        <!-- 運作狀態盒 -->
+        <div class="status-box">
+            <span class="status-badge">即時運作狀態</span>
+            <div id="agentStatusText" style="font-weight: 600;">💖 晴琉在線陪伴中...</div>
+            <div id="videoCycleText" style="margin-top: 6px; color: var(--text-dim); font-size: 0.75rem;">
+                📹 待機影片循環中 (待機 1 ⇄ 待機 2)
+            </div>
+        </div>
+
+        <!-- 對話備份與清除 -->
+        <div class="form-group">
+            <label>💬 對話管理：</label>
+            <div class="button-group-row">
+                <button class="btn-action-small" id="btnExportChat">📥 匯出 Markdown</button>
+                <button class="btn-action-small" id="btnClearChat">🗑️ 清空對話</button>
+            </div>
+        </div>
+
+        <!-- GitHub 倉庫與資訊 -->
+        <div class="status-box" style="margin-top: auto;">
+            <div style="font-size: 0.78rem; color: var(--text-dim); line-height: 1.6;">
+                <b style="color: var(--accent-pink);">🐙 GitHub 專案資訊：</b><br>
+                • 專案：<a href="https://github.com/ShiroSakuraEGS/AI-character-test" target="_blank" style="color: #c9d1d9; text-decoration: underline;">AI-character-test</a><br>
+                • 支援 GitHub Pages 一鍵靜態託管<br>
+                • 獨創地雷哥特美學生圖知識庫<br>
+                • 視訊狀態機：待機循環 + 畫完累累 3 次
+            </div>
+        </div>
+    </div>
+
+    <!-- 浮動視訊迷你膠囊 (手機視訊折疊時快速喚醒) -->
+    <div class="floating-video-badge" id="btnFloatingVideoBadge">
+        <div class="indicator-dot"></div>
+        <span>🎀 晴琉在線中 (點擊展開)</span>
+    </div>
+
+    <!-- 主要應用畫面 -->
+    <div class="main-app">
+        
+        <!-- 角色視訊展示區 (桌機在左側，手機在頂部，可一鍵折疊) -->
+        <div class="video-container" id="videoContainer">
+            <div class="video-wrapper">
+                <div class="video-tag">
+                    <div class="indicator-dot" id="statusDot"></div>
+                    <span id="videoStatusLabel">待機 1</span>
+                </div>
+                <!-- 相對路徑引用 assets，相容 GitHub Pages 子目錄 -->
+                <video id="haruVideo" autoplay muted playsinline loop={false}></video>
+            </div>
+            
+            <div class="char-info">
+                <b>晴琉（Haru / 晴ちゃん）</b>
+                <div>二次元日系地雷哥特美少年</div>
+                <div class="char-badges">
+                    <span class="badge-pill">🐾 黏人呆萌</span>
+                    <span class="badge-pill">🎨 體弱繪師</span>
+                    <span class="badge-pill">🖤 黑粉貓耳</span>
+                </div>
+                <button class="btn-toggle-video-collapse" id="btnToggleVideoCollapse">折疊收起</button>
+            </div>
+        </div>
+
+        <!-- 聊天室面板 -->
+        <div class="chat-container">
+            
+            <!-- 頂部 GitHub 風格導航列 -->
+            <div class="top-navbar">
+                <div class="title-left">
+                    <div class="brand-avatar">🎀</div>
+                    <div class="title-area">
+                        <h1>晴琉的專屬聊天室 <span class="version-badge">v2.0 RWD</span></h1>
+                        <p>地雷哥特美學 AI Agent · GitHub Pages 雙模相容</p>
+                    </div>
+                </div>
+
+                <div class="top-actions">
+                    <!-- GitHub 倉庫按鈕 -->
+                    <a href="https://github.com/ShiroSakuraEGS/AI-character-test" target="_blank" rel="noopener noreferrer" class="btn-github" title="前往 GitHub 專案倉庫">
+                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path></svg>
+                        <span>GitHub</span>
+                    </a>
+                    <!-- 設定面板抽屜按鈕 -->
+                    <button class="btn-drawer-toggle" id="btnOpenDrawer">⚙️ 設定</button>
+                </div>
+            </div>
+
+            <!-- 快捷問答標籤列 (Quick Chips) -->
+            <div class="quick-chips-bar">
+                <button class="chip-btn" data-prompt="晴琉，早安！今天有乖乖看家嗎？(摸摸頭)">🎀 打個招呼！</button>
+                <button class="chip-btn" data-prompt="畫一張你穿著黑粉貓耳連帽外套的萌照給我看吧！">🎨 畫黑粉貓耳外套</button>
+                <button class="chip-btn" data-prompt="畫一張你穿哥特正裝襯衫與十字束帶的帥氣畫像！">🖤 畫哥特束帶正裝</button>
+                <button class="chip-btn" data-prompt="晴琉畫完一張圖是不是會變得很累呀？需要充電嗎？">😴 畫完會不會累？</button>
+                <button class="chip-btn" data-prompt="晴琉最喜歡吃什麼點心呀？">🍓 喜歡什麼點心？</button>
+            </div>
+
+            <!-- 對話訊息列表 -->
+            <div class="messages-scroll" id="chatMessages">
+                <div class="msg-row bot">
+                    <div class="avatar">🎀</div>
+                    <div class="bubble">
+                        ……主人？主人終於來看晴琉了……！🥺🖤<br>
+                        <span class="action-quote">（歪了歪頭，寬大的黑色長袖子輕輕晃了晃）</span><br>
+                        晴琉今天也很努力地看家喔……主人今天想要和晴琉聊天，還是想看晴琉畫圖呢？(⸝⸝•‧̫•⸝⸝)🐾💭<br>
+                        <small style="color:var(--text-dim); display:block; margin-top:6px;">💡 提示：若使用 GitHub Pages，請點擊右上角「⚙️ 設定」輸入 API Key 即可開始暢聊與動漫生圖喔！</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底部輸入列 -->
+            <div class="input-bar-container">
+                <div class="input-bar">
+                    <input type="text" id="userInput" placeholder="對晴琉說點什麼吧……？（例：畫一張黑粉洋裝）" autocomplete="off" />
+                    <button class="btn-send" id="btnSend">
+                        <span>發送</span>
+                        <span>🐾</span>
+                    </button>
+                </div>
+                <div class="input-hint-row">
+                    <span>💡 支援快捷鍵 Enter 發送 · 點擊上方標籤快速提問</span>
+                    <span>🖤 晴琉 AI Agent v2.0</span>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- 載入純前端雙模控制腳本 -->
+    <script src="./app.js"></script>
+</body>
+</html>
