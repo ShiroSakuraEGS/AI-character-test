@@ -1,15 +1,16 @@
 /**
- * 🎀 晴琉 (Haru) - 可愛小男生 AI Agent 純前端雙模引擎 (app.js)
- * 支援：
- * 1. GitHub Pages 純靜態模式 (無後端，純瀏覽器直接調用 Google Gemini API / Groq API / Pollinations)
- * 2. 本機 Python 伺服器模式 (自動偵測 /api/chat)
- * 3. 手機 RWD 動態視窗控制與折疊視訊小窗
- * 4. 視訊播放狀態機：待機1 ⇄ 待機2 輪播，生圖後連續播放「有點累.mp4」3 次
- * 5. 防彈 JSON 解析管線與 Reasoning Shield (過濾思考標籤)
+ * 🎀 晴琉 (Haru) - 沉浸式可愛小男生 AI Agent 雙模核心引擎 (app.js)
+ * 特色：
+ * 1. 沉浸式全螢幕背景角色影片 (滿版置中)
+ * 2. 下 1/3 半透明極簡對話框 (只顯示最新角色對白 + 使用者輸入框)
+ * 3. 獨立浮動按鈕：設定面板、歷史紀錄抽屜、話題快捷列、GitHub 跳轉
+ * 4. 支援 GitHub Pages 純前端直連 (Google Gemini REST API / Groq API / Pollinations 動漫生圖)
+ * 5. 視訊播放狀態機：待機 1 ⇄ 待機 2 循環播放，生圖後連續播放「有點累.mp4」3 次
+ * 6. 防彈級 JSON 解析與 Reasoning Shield (過濾思考標籤)
  */
 
 // ============================================================
-// 📜 1. 內建角色設定與知識庫 (GitHub Pages 純靜態零依賴運行)
+// 📜 1. 角色設定與 System Prompt
 // ============================================================
 
 const HARU_SYSTEM_PROMPT = `
@@ -63,12 +64,9 @@ const INTENT_SYSTEM_PROMPT = `
 `;
 
 // ============================================================
-// 🛡️ 2. 防彈級 JSON 解析與 Reasoning Shield (思考標籤過濾)
+// 🛡️ 2. 防彈級 JSON 解析與 Reasoning Shield
 // ============================================================
 
-/**
- * 過濾模型輸出的思考標籤 (<think>, <thought>, <reasoning>)
- */
 function cleanReasoningShield(text) {
     if (!text) return "";
     let cleaned = text.replace(/<(think|thought|reasoning)>[\s\S]*?<\/\1>/gi, "");
@@ -76,9 +74,6 @@ function cleanReasoningShield(text) {
     return cleaned.trim();
 }
 
-/**
- * 自動修復截斷的 JSON 字串
- */
 function autoRepairTruncatedJson(rawJson) {
     const stack = [];
     let inString = false;
@@ -99,9 +94,8 @@ function autoRepairTruncatedJson(rawJson) {
             continue;
         }
         if (!inString) {
-            if (char === '{' || char === '[') {
-                stack.push(char);
-            } else if (char === '}') {
+            if (char === '{' || char === '[') stack.push(char);
+            else if (char === '}') {
                 if (stack.length && stack[stack.length - 1] === '{') stack.pop();
             } else if (char === ']') {
                 if (stack.length && stack[stack.length - 1] === '[') stack.pop();
@@ -120,13 +114,8 @@ function autoRepairTruncatedJson(rawJson) {
     return rawJson;
 }
 
-/**
- * 防彈級 JSON 解析
- */
 function bulletproofJsonParse(rawText) {
     let text = cleanReasoningShield(rawText);
-
-    // 尋找 Markdown 圍欄或大括號
     const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
     if (match) {
         text = match[1].trim();
@@ -138,55 +127,41 @@ function bulletproofJsonParse(rawText) {
         }
     }
 
-    // 清除結尾多餘逗號
     text = text.replace(/,\s*([}\]])/g, '$1');
-    // 自動修補閉合
     text = autoRepairTruncatedJson(text);
 
     try {
         return JSON.parse(text);
     } catch (e) {
-        // 降級正規表示式檢測
         const needImg = /"need_image"\s*:\s*true/i.test(text);
         return { need_image: needImg, reason: "前端正規表示式降級抽取" };
     }
 }
 
-/**
- * 抽取 <image_prompt> 標籤
- */
 function extractImagePrompt(reply) {
     const regex = /<image_prompt>([\s\S]*?)<\/image_prompt>/i;
     const match = reply.match(regex);
     if (match) {
-        const prompt = match[1].trim();
-        const cleanText = reply.replace(regex, "").trim();
-        return { cleanText, imagePrompt: prompt };
+        return {
+            cleanText: reply.replace(regex, "").trim(),
+            imagePrompt: match[1].trim()
+        };
     }
     return { cleanText: reply, imagePrompt: null };
 }
 
 // ============================================================
-// 🌐 3. 純前端直接調用管線 (Google Gemini REST / Groq REST)
+// 🌐 3. 純前端直接調用管線 (Gemini / Groq / Pollinations)
 // ============================================================
 
-/**
- * 透過瀏覽器直接呼叫 Google Gemini REST API
- */
 async function callGeminiRestApi(prompt, systemInstruction, apiKey, modelName = "gemini-2.5-flash", jsonMode = false) {
     if (!apiKey) {
-        throw new Error("請先在「⚙️ 設定面板」輸入您的 Google Gemini API Key 喔！🐾");
+        throw new Error("請點擊右上角「⚙️ 設定」輸入您的 Google Gemini API Key 喔！🐾");
     }
 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-    
     const bodyPayload = {
-        contents: [
-            {
-                role: "user",
-                parts: [{ text: prompt }]
-            }
-        ],
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
             temperature: 0.7,
             responseMimeType: jsonMode ? "application/json" : "text/plain"
@@ -194,9 +169,7 @@ async function callGeminiRestApi(prompt, systemInstruction, apiKey, modelName = 
     };
 
     if (systemInstruction) {
-        bodyPayload.systemInstruction = {
-            parts: [{ text: systemInstruction }]
-        };
+        bodyPayload.systemInstruction = { parts: [{ text: systemInstruction }] };
     }
 
     const response = await fetch(endpoint, {
@@ -208,7 +181,7 @@ async function callGeminiRestApi(prompt, systemInstruction, apiKey, modelName = 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const errMsg = errorData.error?.message || response.statusText;
-        throw new Error(`Google Gemini API 錯誤 (${response.status}): ${errMsg}`);
+        throw new Error(`Google Gemini 錯誤 (${response.status}): ${errMsg}`);
     }
 
     const data = await response.json();
@@ -216,31 +189,18 @@ async function callGeminiRestApi(prompt, systemInstruction, apiKey, modelName = 
     return cleanReasoningShield(candidateText);
 }
 
-/**
- * 透過瀏覽器直接呼叫 Groq REST API
- */
 async function callGroqRestApi(prompt, systemInstruction, apiKey, modelName = "llama-3.1-8b-instant", jsonMode = false) {
     if (!apiKey) {
-        throw new Error("請先在「⚙️ 設定面板」輸入您的 Groq API Key 喔！🐾");
+        throw new Error("請點擊右上角「⚙️ 設定」輸入您的 Groq API Key 喔！🐾");
     }
 
     const endpoint = "https://api.groq.com/openai/v1/chat/completions";
     const messages = [];
-
-    if (systemInstruction) {
-        messages.push({ role: "system", content: systemInstruction });
-    }
+    if (systemInstruction) messages.push({ role: "system", content: systemInstruction });
     messages.push({ role: "user", content: prompt });
 
-    const payload = {
-        model: modelName,
-        messages: messages,
-        temperature: 0.7
-    };
-
-    if (jsonMode) {
-        payload.response_format = { type: "json_object" };
-    }
+    const payload = { model: modelName, messages, temperature: 0.7 };
+    if (jsonMode) payload.response_format = { type: "json_object" };
 
     const response = await fetch(endpoint, {
         method: "POST",
@@ -254,17 +214,13 @@ async function callGroqRestApi(prompt, systemInstruction, apiKey, modelName = "l
     if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
         const errMsg = errJson.error?.message || response.statusText;
-        throw new Error(`Groq API 錯誤 (${response.status}): ${errMsg}`);
+        throw new Error(`Groq 錯誤 (${response.status}): ${errMsg}`);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
-    return cleanReasoningShield(content);
+    return cleanReasoningShield(data.choices?.[0]?.message?.content || "");
 }
 
-/**
- * 統一 LLM 調用介面 (自動根據 provider 分流)
- */
 async function unifiedCallLlm({ prompt, systemInstruction, provider, apiKey, modelName, jsonMode = false }) {
     if (provider === "google") {
         return await callGeminiRestApi(prompt, systemInstruction, apiKey, modelName || "gemini-2.5-flash", jsonMode);
@@ -274,29 +230,25 @@ async function unifiedCallLlm({ prompt, systemInstruction, provider, apiKey, mod
     throw new Error(`不支援的 API 提供商: ${provider}`);
 }
 
-/**
- * 純前端生圖管線 (Pollinations.ai 動漫生圖，無需金鑰且相容 GitHub Pages)
- */
 async function generateImageClientSide(prompt) {
     const encoded = encodeURIComponent(prompt);
-    // 使用高畫質動漫 Flux 模型
     const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=512&height=512&nologo=true&model=flux`;
     return {
         imageUrl: imageUrl,
-        toolName: "Pollinations FLUX (免費免金鑰動漫生圖)"
+        toolName: "Pollinations FLUX (動漫生圖)"
     };
 }
 
 // ============================================================
-// 📱 4. 前端應用控制器 (UI、狀態機與 RWD 控制)
+// 📱 4. 沉浸式應用控制器 (Immersive Controller)
 // ============================================================
 
-class HaruChatApp {
+class HaruImmersiveApp {
     constructor() {
         this.history = [];
         this.isGenerating = false;
 
-        // 視訊狀態機參數 (支援相對路徑，相容 GitHub Pages)
+        // 視訊播放狀態機 (相對路徑)
         this.IDLE_VIDEOS = ['./assets/待機.mp4', './assets/待機2.mp4'];
         this.TIRED_VIDEO = './assets/有點累.mp4';
         this.idleIndex = 0;
@@ -312,42 +264,50 @@ class HaruChatApp {
     }
 
     initDomElements() {
-        // 側邊抽屜
-        this.sidebar = document.getElementById('sidebar');
+        // 影片與頂部狀態
+        this.videoEl = document.getElementById('haruVideo');
+        this.statusDot = document.getElementById('statusDot');
+        this.agentStatusText = document.getElementById('agentStatusText');
+        this.videoStatusTag = document.getElementById('videoStatusTag');
+
+        // 下 1/3 對話框組件
+        this.userLastSpeech = document.getElementById('userLastSpeech');
+        this.latestBotReply = document.getElementById('latestBotReply');
+        this.imageCardSlot = document.getElementById('imageCardSlot');
+        this.userInput = document.getElementById('userInput');
+        this.btnSend = document.getElementById('btnSend');
+
+        // 話題快捷橫列
+        this.btnToggleChips = document.getElementById('btnToggleChips');
+        this.quickChipsWrapper = document.getElementById('quickChipsWrapper');
+        this.chipPills = document.querySelectorAll('.chip-pill');
+
+        // 抽屜面板控制
         this.drawerOverlay = document.getElementById('drawerOverlay');
         this.btnOpenDrawer = document.getElementById('btnOpenDrawer');
-        this.btnCloseDrawer = document.getElementById('btnCloseDrawer');
+        this.btnCloseSettings = document.getElementById('btnCloseSettings');
+        this.settingsDrawer = document.getElementById('settingsDrawer');
 
-        // 表單設定
+        this.btnOpenHistory = document.getElementById('btnOpenHistory');
+        this.btnCloseHistory = document.getElementById('btnCloseHistory');
+        this.historyDrawer = document.getElementById('historyDrawer');
+        this.historyListContainer = document.getElementById('historyListContainer');
+
+        // 表單元素
         this.backendModeSelect = document.getElementById('backendModeSelect');
         this.providerSelect = document.getElementById('providerSelect');
         this.modelSelect = document.getElementById('modelSelect');
         this.apiKeyInput = document.getElementById('apiKeyInput');
         this.btnSaveKeys = document.getElementById('btnSaveKeys');
         this.btnClearKeys = document.getElementById('btnClearKeys');
-
-        // 狀態與視訊元素
-        this.videoEl = document.getElementById('haruVideo');
-        this.videoStatusLabel = document.getElementById('videoStatusLabel');
-        this.statusDot = document.getElementById('statusDot');
-        this.videoCycleText = document.getElementById('videoCycleText');
-        this.agentStatusText = document.getElementById('agentStatusText');
-        this.videoContainer = document.getElementById('videoContainer');
-        this.btnToggleVideoCollapse = document.getElementById('btnToggleVideoCollapse');
-        this.btnFloatingVideoBadge = document.getElementById('btnFloatingVideoBadge');
-
-        // 聊天對話區
-        this.chatMessages = document.getElementById('chatMessages');
-        this.userInput = document.getElementById('userInput');
-        this.btnSend = document.getElementById('btnSend');
-        this.quickChips = document.querySelectorAll('.chip-btn');
         this.btnClearChat = document.getElementById('btnClearChat');
         this.btnExportChat = document.getElementById('btnExportChat');
+
+        // 燈箱 Modal
+        this.lightboxModal = document.getElementById('lightboxModal');
+        this.lightboxImg = document.getElementById('lightboxImg');
     }
 
-    /**
-     * 從 localStorage 讀取個人設定
-     */
     loadSettings() {
         const savedProvider = localStorage.getItem('haru_provider');
         const savedModel = localStorage.getItem('haru_model');
@@ -367,8 +327,7 @@ class HaruChatApp {
         if (this.modelSelect) localStorage.setItem('haru_model', this.modelSelect.value);
         if (this.apiKeyInput) localStorage.setItem('haru_api_key', this.apiKeyInput.value.trim());
         if (this.backendModeSelect) localStorage.setItem('haru_backend_mode', this.backendModeSelect.value);
-
-        this.showToast("💖 設定與 API Key 已安全保存在瀏覽器中！");
+        this.showToast("💖 設定與 API Key 已安全保存在本機瀏覽器！");
     }
 
     clearSettings() {
@@ -377,24 +336,15 @@ class HaruChatApp {
         this.showToast("🧹 已清除保存的 API Key。");
     }
 
-    /**
-     * 檢測是運行在 GitHub Pages 純靜態環境還是本地 Python 伺服器
-     */
     async detectEnvironment() {
         const isFileOrGithub = window.location.hostname.includes('github.io') || window.location.protocol === 'file:';
-        if (isFileOrGithub) {
-            if (this.backendModeSelect) {
-                this.backendModeSelect.value = "client";
-                this.backendModeSelect.options[0].disabled = true;
-                this.backendModeSelect.options[0].text += " (GitHub Pages 純前端託管中)";
-            }
-            console.log("🌐 偵測到 GitHub Pages 或靜態環境：已鎖定純前端直連模式！");
+        if (isFileOrGithub && this.backendModeSelect) {
+            this.backendModeSelect.value = "client";
+            this.backendModeSelect.options[0].disabled = true;
+            this.backendModeSelect.options[0].text += " (GitHub Pages 純前端託管中)";
         }
     }
 
-    /**
-     * 動態變更模型清單
-     */
     updateModelOptions() {
         const provider = this.providerSelect.value;
         const currentModel = this.modelSelect.value;
@@ -404,8 +354,7 @@ class HaruChatApp {
             const models = [
                 { id: 'gemini-2.5-flash', name: 'Google: gemini-2.5-flash (推薦最穩定敏捷)' },
                 { id: 'gemini-3.8', name: 'Google: gemini-3.8 (最新旗艦相容)' },
-                { id: 'gemini-1.5-flash', name: 'Google: gemini-1.5-flash (經典超輕量)' },
-                { id: 'gemini-1.5-pro', name: 'Google: gemini-1.5-pro (深度推理)' }
+                { id: 'gemini-1.5-flash', name: 'Google: gemini-1.5-flash (經典超輕量)' }
             ];
             models.forEach(m => {
                 const opt = document.createElement('option');
@@ -417,8 +366,7 @@ class HaruChatApp {
         } else {
             const models = [
                 { id: 'llama-3.1-8b-instant', name: 'Groq: llama-3.1-8b-instant (極速推理)' },
-                { id: 'llama3-70b-8192', name: 'Groq: llama3-70b-8192 (高智慧旗艦)' },
-                { id: 'mixtral-8x7b-32768', name: 'Groq: mixtral-8x7b-32768 (長文本)' }
+                { id: 'llama3-70b-8192', name: 'Groq: llama3-70b-8192 (高智慧旗艦)' }
             ];
             models.forEach(m => {
                 const opt = document.createElement('option');
@@ -431,7 +379,7 @@ class HaruChatApp {
     }
 
     // ============================================================
-    // 📹 5. 視訊播放狀態機與 RWD 收合控制器
+    // 📹 5. 視訊播放狀態機 (全螢幕背景)
     // ============================================================
 
     initVideoStateMachine() {
@@ -441,8 +389,7 @@ class HaruChatApp {
             if (this.isTiredMode) {
                 this.tiredPlayCount++;
                 if (this.tiredPlayCount < this.TIRED_MAX_REPEATS) {
-                    this.videoStatusLabel.textContent = `畫完有點累 (${this.tiredPlayCount + 1}/${this.TIRED_MAX_REPEATS}) 💤`;
-                    this.videoCycleText.textContent = `😴 正在播放「有點累.mp4」(${this.tiredPlayCount + 1}/${this.TIRED_MAX_REPEATS})`;
+                    this.videoStatusTag.textContent = `[累累充電 ${this.tiredPlayCount + 1}/${this.TIRED_MAX_REPEATS} 💤]`;
                     this.videoEl.currentTime = 0;
                     this.videoEl.play().catch(e => console.log(e));
                 } else {
@@ -450,7 +397,7 @@ class HaruChatApp {
                     this.isTiredMode = false;
                     this.tiredPlayCount = 0;
                     this.idleIndex = 0;
-                    this.agentStatusText.textContent = '💖 晴琉休息完畢，恢復精神！';
+                    this.agentStatusText.textContent = '晴琉休息完畢 💖';
                     this.playIdleVideo();
                 }
             } else {
@@ -460,7 +407,7 @@ class HaruChatApp {
             }
         });
 
-        // 點擊視訊自動喚起播放 (手機端防靜音限制)
+        // 點擊全螢幕視訊喚醒播放
         this.videoEl.addEventListener('click', () => {
             if (this.videoEl.paused) this.videoEl.play();
         });
@@ -473,11 +420,11 @@ class HaruChatApp {
         this.tiredPlayCount = 0;
         this.videoEl.src = this.IDLE_VIDEOS[this.idleIndex];
         this.videoEl.load();
-        this.videoEl.play().catch(() => console.log('等待使用者互動後自動播放視訊'));
+        this.videoEl.play().catch(() => console.log('點擊螢幕即可自動播放視訊'));
 
-        this.videoStatusLabel.textContent = `待機 ${this.idleIndex === 0 ? '1' : '2'}`;
-        this.statusDot.className = 'indicator-dot';
-        this.videoCycleText.textContent = `📹 待機循環中 (${this.idleIndex === 0 ? '待機 1' : '待機 2'})`;
+        this.videoStatusTag.textContent = `[待機 ${this.idleIndex === 0 ? '1' : '2'}]`;
+        this.statusDot.className = 'status-dot';
+        this.agentStatusText.textContent = `晴琉在線中 🐾`;
     }
 
     triggerTiredVideo() {
@@ -487,65 +434,57 @@ class HaruChatApp {
         this.videoEl.load();
         this.videoEl.play().catch(e => console.log(e));
 
-        this.videoStatusLabel.textContent = `畫完有點累 (1/3) 💤`;
-        this.statusDot.className = 'indicator-dot tired';
-        this.videoCycleText.textContent = `😴 正在播放「有點累.mp4」(1/3)`;
-        this.agentStatusText.textContent = '💤 晴琉畫完全力以赴，軟趴趴充電中...';
-    }
-
-    toggleVideoCollapse() {
-        if (!this.videoContainer) return;
-        const isCollapsed = this.videoContainer.classList.toggle('collapsed');
-        if (this.btnToggleVideoCollapse) {
-            this.btnToggleVideoCollapse.textContent = isCollapsed ? '展開角色' : '折疊收起';
-        }
-        if (this.btnFloatingVideoBadge) {
-            this.btnFloatingVideoBadge.style.display = isCollapsed ? 'flex' : 'none';
-        }
+        this.videoStatusTag.textContent = `[累累充電 1/3 💤]`;
+        this.statusDot.className = 'status-dot tired';
+        this.agentStatusText.textContent = `晴琉畫完累累中... 💤`;
     }
 
     // ============================================================
-    // 💬 6. 訊息渲染與對話流程
+    // 💬 6. 極簡下 1/3 對話更新與歷史紀錄
     // ============================================================
 
-    appendMessage({ role, text, imageUrl = null, imageBase64 = null, imageTool = null, imagePrompt = null }) {
-        const row = document.createElement('div');
-        row.className = `msg-row ${role}`;
-
-        const avatar = document.createElement('div');
-        avatar.className = 'avatar';
-        avatar.textContent = role === 'user' ? '🖤' : '🎀';
-
-        const bubble = document.createElement('div');
-        bubble.className = 'bubble';
-
-        // 動作括號高亮渲染
+    formatDialogueText(text) {
         let formatted = text.replace(/（(.*?)）/g, '<span class="action-quote">（$1）</span>');
         formatted = formatted.replace(/\((.*?)\)/g, '<span class="action-quote">($1)</span>');
-        formatted = formatted.replace(/\n/g, '<br>');
-        bubble.innerHTML = formatted;
+        return formatted.replace(/\n/g, '<br>');
+    }
 
-        // 若有圖片
-        if (imageUrl || imageBase64) {
-            const imgSrc = imageUrl ? imageUrl : `data:image/png;base64,${imageBase64}`;
-            const card = document.createElement('div');
-            card.className = 'image-card';
-            card.innerHTML = `
-                <img src="${imgSrc}" alt="晴琉畫的圖" loading="lazy" />
-                <div class="image-info">
-                    <div style="font-weight:600; color:var(--accent-pink);">🎨 生圖引擎：${imageTool || 'AI 生圖模組'}</div>
-                    <div style="font-size:0.75rem; margin-top:3px; color:var(--text-dim); word-break:break-all;">
-                        💭 <b>獨創 Prompt：</b> <i>${imagePrompt || 'Gothic Cat-Ear Anime Boy'}</i>
+    updateLatestDialogue({ text, imageUrl = null, imageTool = null, imagePrompt = null }) {
+        this.latestBotReply.innerHTML = this.formatDialogueText(text);
+
+        if (imageUrl) {
+            this.imageCardSlot.style.display = 'block';
+            this.imageCardSlot.innerHTML = `
+                <div class="image-preview-box" id="btnPreviewImage">
+                    <img src="${imageUrl}" alt="晴琉畫的圖" />
+                    <div class="image-preview-info">
+                        <b>🎨 晴琉畫好啦！(點擊放大查看)</b>
+                        <div style="font-size:0.72rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                            Prompt: ${imagePrompt || 'Gothic Cat-Ear Anime Boy'}
+                        </div>
                     </div>
                 </div>
             `;
-            bubble.appendChild(card);
+            // 綁定大圖燈箱點擊事件
+            document.getElementById('btnPreviewImage')?.addEventListener('click', () => {
+                this.lightboxImg.src = imageUrl;
+                this.lightboxModal.classList.add('active');
+            });
+        } else {
+            this.imageCardSlot.style.display = 'none';
+            this.imageCardSlot.innerHTML = '';
         }
+    }
 
-        row.appendChild(avatar);
-        row.appendChild(bubble);
-        this.chatMessages.appendChild(row);
-        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+    addHistoryRecord(role, text) {
+        const item = document.createElement('div');
+        item.className = `history-item ${role}`;
+        const roleLabel = role === 'user' ? '🖤 主人' : '🎀 晴琉';
+        item.innerHTML = `
+            <div class="history-role">${roleLabel}</div>
+            <div>${text}</div>
+        `;
+        this.historyListContainer.appendChild(item);
     }
 
     async handleSend(textOverride = null) {
@@ -556,29 +495,27 @@ class HaruChatApp {
         this.isGenerating = true;
         this.btnSend.disabled = true;
 
-        // 加入使用者訊息
-        this.appendMessage({ role: 'user', text: text });
+        // 更新使用者的最新發言標記
+        this.userLastSpeech.textContent = `🖤 主人：「${text}」`;
+        this.addHistoryRecord('user', text);
         this.history.push({ role: 'user', content: text });
 
-        this.agentStatusText.textContent = '💭 晴琉正在思考中...（歪了歪頭）';
+        this.agentStatusText.textContent = '晴琉正在歪頭思考... 💭';
+        this.latestBotReply.innerHTML = `<span style="color:var(--text-dim);">（歪著頭，大大的眼睛眨巴眨巴地望著主人思考著……💭✨）</span>`;
+        this.imageCardSlot.style.display = 'none';
 
         const backendMode = this.backendModeSelect ? this.backendModeSelect.value : 'client';
 
         try {
             if (backendMode === 'local') {
-                // 嘗試走本機 Python 伺服器
                 await this.sendViaLocalServer(text);
             } else {
-                // 純前端 GitHub Pages 直連模式
                 await this.sendViaClientSide(text);
             }
         } catch (err) {
-            console.error("發送失敗:", err);
-            this.appendMessage({
-                role: 'bot',
-                text: `嗚……主人，晴琉的腦袋好像打結了……(つд⊂)💦<br><small style="color:var(--accent-pink);">錯誤原因：${err.message}</small>`
-            });
-            this.agentStatusText.textContent = '⚠️ 連線異常';
+            console.error("對話失敗:", err);
+            this.latestBotReply.innerHTML = `嗚……主人，晴琉的腦袋好像打結了……(つд⊂)💦<br><small style="color:var(--accent-pink);">錯誤原因：${err.message}</small>`;
+            this.agentStatusText.textContent = '連線異常 ⚠️';
         } finally {
             this.isGenerating = false;
             this.btnSend.disabled = false;
@@ -586,19 +523,16 @@ class HaruChatApp {
         }
     }
 
-    /**
-     * 純前端管線流程 (GitHub Pages 零後端)
-     */
     async sendViaClientSide(text) {
         const provider = this.providerSelect.value;
         const modelName = this.modelSelect.value;
         const apiKey = this.apiKeyInput.value.trim();
 
         if (!apiKey) {
-            throw new Error("請先在右上角「⚙️ 設定面板」填入您的 API Key（Google 或 Groq）！設定會保存在您自己的瀏覽器中，安全又快速喔！");
+            throw new Error("請先點擊右上角「⚙️ 設定」貼上您的 API Key 喔！🐾");
         }
 
-        // 步驟 1：極速意圖判定 (是否生圖)
+        // 1. 意圖判定
         let needImage = false;
         try {
             const intentRaw = await unifiedCallLlm({
@@ -612,12 +546,11 @@ class HaruChatApp {
             const parsedIntent = bulletproofJsonParse(intentRaw);
             needImage = Boolean(parsedIntent.need_image);
         } catch (e) {
-            // 關鍵字備援降級
             const kws = ["畫", "圖", "照片", "造型", "外表", "長相", "樣貌", "洋裝", "衣服", "穿著", "draw", "image", "pic"];
             needImage = kws.some(k => text.toLowerCase().includes(k));
         }
 
-        // 步驟 2：角色扮演對話生成
+        // 2. 構建上下文
         let historyContext = "【歷史對話】:\n";
         this.history.slice(-6).forEach(m => {
             const name = m.role === 'user' ? '主人' : '晴琉';
@@ -631,8 +564,8 @@ class HaruChatApp {
         const fullPrompt = `${historyContext}\n主人最新說話：${text}\n${taskGuidance}`;
 
         this.agentStatusText.textContent = needImage
-            ? '🎨 晴琉正在調配顏料準備畫畫中...'
-            : '💖 晴琉正在組織可愛的回覆...';
+            ? '晴琉正在調配顏料準備畫畫... 🎨'
+            : '晴琉正在可愛地回覆... 💖';
 
         const rawReply = await unifiedCallLlm({
             prompt: fullPrompt,
@@ -645,36 +578,32 @@ class HaruChatApp {
 
         const { cleanText, imagePrompt } = extractImagePrompt(rawReply);
         this.history.push({ role: 'assistant', content: cleanText });
+        this.addHistoryRecord('assistant', cleanText);
 
-        // 步驟 3：若需要生圖，調用純前端生圖
+        // 3. 生圖處理
         let generatedImg = null;
         if (needImage || imagePrompt) {
             const promptToDraw = imagePrompt || "1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, oversized black hoodie with cat ears, gothic punk aesthetic, masterpiece, best quality";
-            
-            this.agentStatusText.textContent = '✨ 晴琉正在使出全力畫圖中！(筆尖飛舞)';
+            this.agentStatusText.textContent = '晴琉正在使出全力畫圖中！✨';
             generatedImg = await generateImageClientSide(promptToDraw);
         }
 
-        // 渲染回覆
-        this.appendMessage({
-            role: 'bot',
+        // 更新下 1/3 對話框
+        this.updateLatestDialogue({
             text: cleanText,
             imageUrl: generatedImg ? generatedImg.imageUrl : null,
             imageTool: generatedImg ? generatedImg.toolName : null,
             imagePrompt: imagePrompt
         });
 
-        // 步驟 4：若生圖，觸發連續 3 次「有點累.mp4」狀態機
+        // 4. 狀態機切換
         if (needImage || imagePrompt) {
             this.triggerTiredVideo();
         } else {
-            this.agentStatusText.textContent = '💖 晴琉在線陪伴中...';
+            this.agentStatusText.textContent = '晴琉在線中 🐾';
         }
     }
 
-    /**
-     * 本機 Python 伺服器管線流程 (走 /api/chat)
-     */
     async sendViaLocalServer(text) {
         const response = await fetch('/api/chat', {
             method: 'POST',
@@ -689,40 +618,37 @@ class HaruChatApp {
             })
         });
 
-        if (!response.ok) {
-            throw new Error(`本地伺服器錯誤: ${response.statusText}`);
-        }
+        if (!response.ok) throw new Error(`本機伺服器錯誤: ${response.statusText}`);
 
         const data = await response.json();
-        if (!data.success && data.error) {
-            throw new Error(data.error);
-        }
+        if (!data.success && data.error) throw new Error(data.error);
 
-        this.appendMessage({
-            role: 'bot',
+        this.history.push({ role: 'assistant', content: data.clean_text });
+        this.addHistoryRecord('assistant', data.clean_text);
+
+        const imgUrl = data.image_base64 ? `data:image/png;base64,${data.image_base64}` : null;
+        this.updateLatestDialogue({
             text: data.clean_text,
-            imageBase64: data.image_base64,
+            imageUrl: imgUrl,
             imageTool: data.image_tool_name,
             imagePrompt: data.extracted_prompt
         });
 
-        this.history.push({ role: 'assistant', content: data.clean_text });
-
         if (data.trigger_tired_video) {
             this.triggerTiredVideo();
         } else {
-            this.agentStatusText.textContent = '💖 晴琉在線陪伴中...';
+            this.agentStatusText.textContent = '晴琉在線中 🐾';
         }
     }
 
     clearChat() {
         if (!confirm("確定要清空與晴琉的所有對話紀錄嗎？(｡•́︿•̀｡)")) return;
         this.history = [];
-        this.chatMessages.innerHTML = '';
-        this.appendMessage({
-            role: 'bot',
+        this.historyListContainer.innerHTML = '';
+        this.updateLatestDialogue({
             text: '主人……我們重新開始聊天了喔！今天想要晴琉為您做些什麼呢？(⸝⸝•‧̫•⸝⸝)🐾'
         });
+        this.userLastSpeech.textContent = '主人：點擊下方即可開始對話 🐾';
         this.showToast("已清空對話紀錄。");
     }
 
@@ -741,7 +667,7 @@ class HaruChatApp {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Haru-Chat-History-${Date.now()}.md`;
+        a.download = `Haru-Chat-${Date.now()}.md`;
         a.click();
         URL.revokeObjectURL(url);
     }
@@ -755,32 +681,50 @@ class HaruChatApp {
         setTimeout(() => {
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 300);
-        }, 2600);
+        }, 2500);
     }
 
     bindEvents() {
-        // 抽屜開關
+        // 設定抽屜
         this.btnOpenDrawer?.addEventListener('click', () => {
-            this.sidebar.classList.add('open');
+            this.settingsDrawer.classList.add('open');
             this.drawerOverlay.classList.add('active');
         });
-
-        const closeDrawer = () => {
-            this.sidebar.classList.remove('open');
+        this.btnCloseSettings?.addEventListener('click', () => {
+            this.settingsDrawer.classList.remove('open');
             this.drawerOverlay.classList.remove('active');
-        };
+        });
 
-        this.btnCloseDrawer?.addEventListener('click', closeDrawer);
-        this.drawerOverlay?.addEventListener('click', closeDrawer);
+        // 歷史抽屜
+        this.btnOpenHistory?.addEventListener('click', () => {
+            this.historyDrawer.classList.add('open');
+            this.drawerOverlay.classList.add('active');
+        });
+        this.btnCloseHistory?.addEventListener('click', () => {
+            this.historyDrawer.classList.remove('open');
+            this.drawerOverlay.classList.remove('active');
+        });
 
-        // 設定切換
-        this.providerSelect?.addEventListener('change', () => this.updateModelOptions());
-        this.btnSaveKeys?.addEventListener('click', () => this.saveSettings());
-        this.btnClearKeys?.addEventListener('click', () => this.clearSettings());
+        // 點擊遮罩關閉抽屜
+        this.drawerOverlay?.addEventListener('click', () => {
+            this.settingsDrawer.classList.remove('open');
+            this.historyDrawer.classList.remove('open');
+            this.drawerOverlay.classList.remove('active');
+        });
 
-        // 視訊折疊收合
-        this.btnToggleVideoCollapse?.addEventListener('click', () => this.toggleVideoCollapse());
-        this.btnFloatingVideoBadge?.addEventListener('click', () => this.toggleVideoCollapse());
+        // 快捷話題橫列切換
+        this.btnToggleChips?.addEventListener('click', () => {
+            const isHidden = this.quickChipsWrapper.style.display === 'none';
+            this.quickChipsWrapper.style.display = isHidden ? 'flex' : 'none';
+        });
+
+        // 快捷標籤點擊發送
+        this.chipPills?.forEach(pill => {
+            pill.addEventListener('click', () => {
+                const prompt = pill.getAttribute('data-prompt');
+                if (prompt) this.handleSend(prompt);
+            });
+        });
 
         // 發送訊息
         this.btnSend?.addEventListener('click', () => this.handleSend());
@@ -788,22 +732,21 @@ class HaruChatApp {
             if (e.key === 'Enter') this.handleSend();
         });
 
-        // 快捷標籤
-        this.quickChips?.forEach(chip => {
-            chip.addEventListener('click', () => {
-                const prompt = chip.getAttribute('data-prompt');
-                if (prompt) this.handleSend(prompt);
-            });
-        });
-
-        // 對話匯出與清除
+        // 表單設定
+        this.providerSelect?.addEventListener('change', () => this.updateModelOptions());
+        this.btnSaveKeys?.addEventListener('click', () => this.saveSettings());
+        this.btnClearKeys?.addEventListener('click', () => this.clearSettings());
         this.btnClearChat?.addEventListener('click', () => this.clearChat());
         this.btnExportChat?.addEventListener('click', () => this.exportChat());
+
+        // 燈箱關閉
+        this.lightboxModal?.addEventListener('click', () => {
+            this.lightboxModal.classList.remove('active');
+        });
     }
 }
 
-// 當 DOM 加載完成後啟動 App
+// 頁面加載完成後啟動
 document.addEventListener('DOMContentLoaded', () => {
-    window.haruApp = new HaruChatApp();
+    window.haruApp = new HaruImmersiveApp();
 });
-
