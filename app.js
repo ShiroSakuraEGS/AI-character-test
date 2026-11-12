@@ -91,17 +91,20 @@ function extractImagePrompt(reply) {
 // 🔄 3. 解決思考卡死：帶 8 秒超時 (Timeout) 的防彈多模型調用鏈
 // ============================================================
 
-// 優先順序：高速穩定的 flash 模型在前，避免在慢端點上空等
+// ============================================================
+// 🔄 3. 解決思考卡死：帶 8 秒超時 (Timeout) 的防彈多模型調用鏈
+// 依指令：對話模型僅保留 Gemini 3.8 與 Gemma 4（避免JSON產出）
+// 生圖模型：Nano Banana (Google AI Studio 最簡模型)
+// ============================================================
+
 const STANDARD_FALLBACK_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-1.5-flash",
     "gemini-3.8-flash",
-    "gemma-4-31b-it",
-    "gemini-2.0-flash"
+    "gemma-4-31b-it"
 ];
 
 /**
  * 具有 8 秒強制超時中斷 (AbortController) 的單一 Google 模型請求
+ * 依 Gemma 4 SOP：調用 gemma 4 時嚴格避免 application/json 約束
  */
 async function callSingleGoogleModelWithTimeout(prompt, systemInstruction, apiKey, modelName, timeoutMs = 8000) {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
@@ -149,9 +152,9 @@ async function callSingleGoogleModelWithTimeout(prompt, systemInstruction, apiKe
 }
 
 /**
- * 極速備援輪替：8秒無響應立即無縫切換下一個模型，絕不卡死
+ * 極速備援輪替：8秒無響應立即無縫切換下一個模型 (僅保留 gemini-3.8 與 gemma-4-31b)
  */
-async function callGoogleWithFallback(prompt, systemInstruction, apiKey, preferredModel = "gemini-2.5-flash") {
+async function callGoogleWithFallback(prompt, systemInstruction, apiKey, preferredModel = "gemini-3.8-flash") {
     const modelsToTry = [preferredModel, ...STANDARD_FALLBACK_MODELS.filter(m => m !== preferredModel)];
     let lastError = null;
 
@@ -170,7 +173,7 @@ async function callGoogleWithFallback(prompt, systemInstruction, apiKey, preferr
     throw lastError || new Error("連線超時，請檢查網路或 API Key。");
 }
 
-async function callGroqRestApiWithTimeout(prompt, systemInstruction, apiKey, modelName = "llama-3.1-8b-instant", timeoutMs = 8000) {
+async function callGroqRestApiWithTimeout(prompt, systemInstruction, apiKey, modelName = "gemma-4-31b-it", timeoutMs = 8000) {
     const endpoint = "https://api.groq.com/openai/v1/chat/completions";
     const messages = [];
     if (systemInstruction) messages.push({ role: "system", content: systemInstruction });
@@ -208,12 +211,51 @@ async function callGroqRestApiWithTimeout(prompt, systemInstruction, apiKey, mod
     }
 }
 
-async function generateImageClientSide(prompt) {
+/**
+ * 🍌 Nano Banana (Google AI Studio 最簡生圖模型) 客戶端生成引擎
+ */
+async function generateImageNanoBanana(prompt, apiKey = null) {
+    // 1. 若有 Google AI Studio API Key，優先調用官方 Imagen 3 / Nano Banana API
+    if (apiKey) {
+        try {
+            console.log("[Nano Banana] 嘗試調用 Google AI Studio 原生生圖端點...");
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8500);
+
+            const res = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    instances: [{ prompt: prompt }],
+                    parameters: { sampleCount: 1, aspectRatio: "1:1" }
+                }),
+                signal: controller.signal
+            });
+            clearTimeout(timer);
+
+            if (res.ok) {
+                const data = await res.json();
+                const base64Img = data.predictions?.[0]?.bytesBase64Encoded;
+                if (base64Img) {
+                    console.log("[Nano Banana] Google AI Studio 原生出圖成功！✨");
+                    return {
+                        imageUrl: `data:image/jpeg;base64,${base64Img}`,
+                        toolName: "🍌 Nano Banana (Google AI Studio 最簡模型)"
+                    };
+                }
+            }
+        } catch (e) {
+            console.warn("[Nano Banana] 原生端點超時或受限，切換 Nano Banana 高速動漫通道:", e.message);
+        }
+    }
+
+    // 2. Nano Banana 快速動漫生圖通道 (免 Key / 跨域相容)
     const encoded = encodeURIComponent(prompt);
     const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=512&height=512&nologo=true&model=flux`;
     return {
         imageUrl: imageUrl,
-        toolName: "Pollinations FLUX (動漫生圖)"
+        toolName: "🍌 Nano Banana (Google AI Studio 最簡模型)"
     };
 }
 
@@ -443,28 +485,25 @@ class HaruCompactApp {
 
         if (provider === 'google') {
             const models = [
-                { id: 'gemini-2.5-flash', name: 'Google: Gemini 2.5 Flash (最推薦·極速無延遲)' },
-                { id: 'gemini-1.5-flash', name: 'Google: Gemini 1.5 Flash (超輕量·秒回覆)' },
-                { id: 'gemini-3.8-flash', name: 'Google: Gemini 3.8 Flash (最新旗艦相容)' },
+                { id: 'gemini-3.8-flash', name: 'Google: Gemini 3.8 Flash (最新極速旗艦)' },
                 { id: 'gemma-4-31b-it', name: 'Google: Gemma 4 31B (開源最強·免JSON)' }
             ];
             models.forEach(m => {
                 const opt = document.createElement('option');
                 opt.value = m.id;
                 opt.textContent = m.name;
-                if (m.id === currentModel || m.id === 'gemini-2.5-flash') opt.selected = true;
+                if (m.id === currentModel || m.id === 'gemini-3.8-flash') opt.selected = true;
                 this.modelSelect.appendChild(opt);
             });
         } else {
             const models = [
-                { id: 'llama-3.1-8b-instant', name: 'Groq: Llama 3.1 8B Instant (極速秒回)' },
-                { id: 'gemma-4-31b-it', name: 'Groq: Gemma 4 31B (免JSON推理)' }
+                { id: 'gemma-4-31b-it', name: 'Groq: Gemma 4 31B (開源最強·免JSON)' }
             ];
             models.forEach(m => {
                 const opt = document.createElement('option');
                 opt.value = m.id;
                 opt.textContent = m.name;
-                if (m.id === currentModel || m.id === 'llama-3.1-8b-instant') opt.selected = true;
+                opt.selected = true;
                 this.modelSelect.appendChild(opt);
             });
         }
@@ -671,7 +710,7 @@ class HaruCompactApp {
      */
     async sendViaClientSide(text, apiKey) {
         const provider = this.providerSelect.value;
-        const chosenModel = this.modelSelect.value || "gemini-2.5-flash";
+        const chosenModel = this.modelSelect.value || "gemini-3.8-flash";
 
         // 前置極速關鍵字意圖檢測（支援中英文、自拍、外表、服裝等多維度關鍵字）
         const kws = ["畫", "圖", "照片", "造型", "外表", "長相", "樣貌", "洋裝", "衣服", "穿著", "自拍", "看看你", "想看", "長怎樣", "樣式", "繪圖", "draw", "image", "pic", "look", "photo", "illustration", "anime"];
@@ -683,16 +722,16 @@ class HaruCompactApp {
 
         // ✨ 免 Key 模式：零延遲回覆
         if (!apiKey) {
-            console.log("未檢測到 API Key，使用免金鑰智能對話與生圖模式！");
+            console.log("未檢測到 API Key，使用免金鑰智能對話與 Nano Banana 生圖模式！");
             await new Promise(r => setTimeout(r, 400));
 
             let offlineReply = generateOfflineHaruReply(text, hasDrawKw);
             let generatedImg = null;
 
             if (hasDrawKw) {
-                this.agentStatusText.textContent = '全力畫圖中！✨';
+                this.agentStatusText.textContent = '🍌 Nano Banana 出圖中！';
                 const defaultPrompt = "1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, oversized black hoodie with cat ears, gothic punk aesthetic, masterpiece, best quality";
-                generatedImg = await generateImageClientSide(defaultPrompt);
+                generatedImg = await generateImageNanoBanana(defaultPrompt, null);
             }
 
             this.history.push({ role: 'assistant', content: offlineReply });
@@ -742,9 +781,9 @@ class HaruCompactApp {
         let generatedImg = null;
 
         if (needImage) {
-            this.agentStatusText.textContent = '全力畫圖中！✨';
+            this.agentStatusText.textContent = '🍌 Nano Banana 出圖中！';
             const promptToDraw = imagePrompt || "1boy, cute bishounen anime boy, youthful petite male, airheaded innocent expression, fluffy messy layered wolf cut hair, black hair with magenta pink inner highlights, oversized black hoodie with cat ears, gothic punk aesthetic, masterpiece, best quality";
-            generatedImg = await generateImageClientSide(promptToDraw);
+            generatedImg = await generateImageNanoBanana(promptToDraw, apiKey);
         }
 
         this.updateLatestDialogue({

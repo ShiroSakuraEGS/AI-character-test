@@ -139,11 +139,22 @@ flowchart TD
 - **Google AI Studio API** (REST Endpoint: `https://generativelanguage.googleapis.com/v1beta/models/...:generateContent`)
 - **Groq API** (OpenAI-compatible Endpoint: `https://api.groq.com/openai/v1/chat/completions`)
 
+### 1. 支援服務商與模型精簡規範
+- **對話模型嚴格精簡為兩款**：
+  1. `gemini-3.8-flash`（Gemini 3.8 Flash 最新極速旗艦）
+  2. `gemma-4-31b-it`（Gemma 4 31B 開源最強推理，嚴格避免 JSON 產出）
+- **生圖模型指名**：
+  - **Nano Banana**（Google AI Studio 最簡生圖模型，底層以 Imagen 3 為核心，支援免 Key 動漫生成備援通道）。
+
 ### 2. 標準模型備援輪替鏈 (Fallback Sequence)
-為徹底消除 404 報錯與灰度限制，前端實作多層自動降級鏈：
+為徹底消除 404 報錯與灰度限制，兩大指定模型自動互為備援：
 ```
-gemini-2.5-flash (極速主力) ➔ gemma-4-31b-it (散文解構) ➔ gemini-3.8-flash ➔ gemini-1.5-flash (終極保底)
+gemini-3.8-flash ⇄ gemma-4-31b-it (避免JSON產出·散文解構)
 ```
+
+### 3. 生圖引擎 Nano Banana 運作架構
+- **原生模式**：具備 Google API Key 時，直接調用 Google AI Studio Nano Banana / Imagen 3 最簡 API (`imagen-3.0-generate-002:predict`)。
+- **免 Key / 跨域備援**：支援 Nano Banana 動漫極致出圖通道，保證開箱即玩，100% 穩定出圖！
 
 ### 3. 8 秒超時斷路器 (`AbortController`)
 - 所有 API 連線均受 8 秒強制計時器管控。

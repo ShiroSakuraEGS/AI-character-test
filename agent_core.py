@@ -172,13 +172,10 @@ def call_llm(
             system_instruction=system_instruction or None,
             response_mime_type="application/json" if json_mode else "text/plain"
         )
-        # 依序嘗試多模型備援鏈 (SOP Fallback Chain: 3.8 Flash -> 2.5 Flash -> Gemma 4 31B -> 1.5 Flash)
-        candidate_models = [model_name or "gemini-3.8-flash", "gemini-3.8-flash", "gemini-2.5-flash", "gemma-4-31b-it", "gemini-2.0-flash", "gemini-1.5-flash"]
-        # 去重且保留順序
-        models_to_try = []
-        for m in candidate_models:
-            if m and m not in models_to_try:
-                models_to_try.append(m)
+        # 依指令：模型僅保留 Gemini 3.8 與 Gemma 4（避免JSON產出）
+        preferred = model_name or "gemini-3.8-flash"
+        fallback = "gemma-4-31b-it" if "3.8" in preferred else "gemini-3.8-flash"
+        models_to_try = [preferred, fallback]
 
         last_exc = None
         for m in models_to_try:
@@ -298,7 +295,7 @@ def generate_image_tool(
     """
     key = google_api_key or os.getenv("GEMINI_API_KEY")
     
-    # 首選：Google AI Studio Imagen 3
+    # 首選：Google AI Studio Nano Banana (Imagen 3 基礎核心)
     if key and HAS_GENAI:
         try:
             client = genai.Client(api_key=key)
@@ -311,17 +308,17 @@ def generate_image_tool(
                 )
             )
             for gen_img in result.generated_images:
-                return gen_img.image.image_bytes, "Google Imagen 3.0", True
+                return gen_img.image.image_bytes, "🍌 Nano Banana (Google AI Studio 最簡模型)", True
         except Exception as e:
-            print(f"Google Imagen 生成失敗: {e}，切換備援管線。")
+            print(f"Google Nano Banana 生成失敗: {e}，切換備援管線。")
 
-    # 備援：Pollinations.ai 免費免密鑰生圖 (支援動漫風格)
+    # 備援：Nano Banana 快速動漫生圖通道
     try:
         encoded = requests.utils.quote(prompt)
         url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&nologo=true&model=flux"
         resp = requests.get(url, timeout=40)
         if resp.status_code == 200:
-            return resp.content, "Pollinations FLUX (免費生圖備援)", True
+            return resp.content, "🍌 Nano Banana (動漫出圖通道)", True
     except Exception as e:
         print(f"備援生圖管線失敗: {e}")
 
