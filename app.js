@@ -3,7 +3,7 @@
  * 特色：
  * 1. 沉浸式全螢幕背景角色影片 (滿版置中)
  * 2. 下 1/3 超緊湊半透明極簡對話框 (支援一鍵折疊收起 ▼ / ▲)
- * 3. 手機端微型晶透按鈕 (Micro UI)
+ * 3. 手機端微型晶透按鈕 (獨立絕對定位，100% 點擊響應)
  * 4. 支援 GitHub Pages 純前端直連 (Google Gemini REST API / Groq API / Pollinations 動漫生圖)
  * 5. 視訊播放狀態機：待機 1 ⇄ 待機 2 循環播放，生圖後連續播放「有點累.mp4」3 次
  * 6. 防彈級 JSON 解析與 Reasoning Shield (過濾思考標籤)
@@ -381,6 +381,36 @@ class HaruCompactApp {
     }
 
     // ============================================================
+    // 🚪 公開抽屜控制方法 (同時支援 HTML inline onclick 與 JS 監聽)
+    // ============================================================
+
+    openSettingsDrawer() {
+        if (!this.settingsDrawer || !this.drawerOverlay) return;
+        this.historyDrawer?.classList.remove('open');
+        this.settingsDrawer.classList.add('open');
+        this.drawerOverlay.classList.add('active');
+    }
+
+    openHistoryDrawer() {
+        if (!this.historyDrawer || !this.drawerOverlay) return;
+        this.settingsDrawer?.classList.remove('open');
+        this.historyDrawer.classList.add('open');
+        this.drawerOverlay.classList.add('active');
+    }
+
+    closeAllDrawers() {
+        this.settingsDrawer?.classList.remove('open');
+        this.historyDrawer?.classList.remove('open');
+        this.drawerOverlay?.classList.remove('active');
+    }
+
+    toggleChips() {
+        if (!this.quickChipsWrapper) return;
+        const currentDisplay = window.getComputedStyle(this.quickChipsWrapper).display;
+        this.quickChipsWrapper.style.display = (currentDisplay === 'none') ? 'flex' : 'none';
+    }
+
+    // ============================================================
     // 📹 5. 視訊播放狀態機
     // ============================================================
 
@@ -544,7 +574,8 @@ class HaruCompactApp {
         const apiKey = this.apiKeyInput.value.trim();
 
         if (!apiKey) {
-            throw new Error("請先點擊右上角「⚙️ 設定」貼上您的 API Key 喔！🐾");
+            this.openSettingsDrawer();
+            throw new Error("請先在開啟的「⚙️ 設定面板」貼上您的 API Key 喔！🐾");
         }
 
         // 1. 意圖判定
@@ -698,44 +729,6 @@ class HaruCompactApp {
     }
 
     bindEvents() {
-        // 設定抽屜
-        this.btnOpenDrawer?.addEventListener('click', () => {
-            this.settingsDrawer.classList.add('open');
-            this.drawerOverlay.classList.add('active');
-        });
-        this.btnCloseSettings?.addEventListener('click', () => {
-            this.settingsDrawer.classList.remove('open');
-            this.drawerOverlay.classList.remove('active');
-        });
-
-        // 歷史抽屜
-        this.btnOpenHistory?.addEventListener('click', () => {
-            this.historyDrawer.classList.add('open');
-            this.drawerOverlay.classList.add('active');
-        });
-        this.btnCloseHistory?.addEventListener('click', () => {
-            this.historyDrawer.classList.remove('open');
-            this.drawerOverlay.classList.remove('active');
-        });
-
-        // 點擊遮罩關閉抽屜
-        this.drawerOverlay?.addEventListener('click', () => {
-            this.settingsDrawer.classList.remove('open');
-            this.historyDrawer.classList.remove('open');
-            this.drawerOverlay.classList.remove('active');
-        });
-
-        // 一鍵收合/展開對話框
-        this.btnToggleMinimize?.addEventListener('click', () => {
-            this.toggleMinimizeDialogue();
-        });
-
-        // 快捷話題橫列切換
-        this.btnToggleChips?.addEventListener('click', () => {
-            const isHidden = window.getComputedStyle(this.quickChipsWrapper).display === 'none';
-            this.quickChipsWrapper.style.display = isHidden ? 'flex' : 'none';
-        });
-
         // 快捷標籤點擊發送
         this.chipPills?.forEach(pill => {
             pill.addEventListener('click', () => {
@@ -744,26 +737,17 @@ class HaruCompactApp {
             });
         });
 
-        // 發送訊息
-        this.btnSend?.addEventListener('click', () => this.handleSend());
+        // 發送訊息按鍵
         this.userInput?.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') this.handleSend();
         });
 
         // 表單設定
         this.providerSelect?.addEventListener('change', () => this.updateModelOptions());
-        this.btnSaveKeys?.addEventListener('click', () => this.saveSettings());
-        this.btnClearKeys?.addEventListener('click', () => this.clearSettings());
-        this.btnClearChat?.addEventListener('click', () => this.clearChat());
-        this.btnExportChat?.addEventListener('click', () => this.exportChat());
-
-        // 燈箱關閉
-        this.lightboxModal?.addEventListener('click', () => {
-            this.lightboxModal.classList.remove('active');
-        });
     }
 }
 
+// 實例化並暴露至全域 window.haruApp
 document.addEventListener('DOMContentLoaded', () => {
     window.haruApp = new HaruCompactApp();
 });
